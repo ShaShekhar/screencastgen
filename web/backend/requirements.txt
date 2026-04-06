@@ -1,0 +1,11 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+sqlalchemy[asyncio]>=2.0
+asyncpg>=0.29
+psycopg2-binary>=2.9
+alembic>=1.13
+celery[redis]>=5.3
+redis>=5.0
+sse-starlette>=2.0
+python-multipart>=0.0.9
+pydantic-settings>=2.0

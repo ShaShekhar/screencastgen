@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps for psycopg2 and ffmpeg
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg libpq-dev gcc && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install screencastgen package
+COPY pyproject.toml requirements.txt ./
+COPY screencastgen/ screencastgen/
+RUN pip install --no-cache-dir -e .
+
+# Install web backend deps
+COPY web/backend/requirements.txt web/backend/requirements.txt
+RUN pip install --no-cache-dir -r web/backend/requirements.txt
+
+# Copy web backend code
+COPY web/ web/
+
+# Create data directories
+RUN mkdir -p /data/uploads /data/outputs
+
+EXPOSE 8000
+
+CMD ["uvicorn", "web.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,44 @@
+# Audio output
+audio/
+*.mp3
+*.wav
+*.ogg
+
+# Credentials
+*service*.json
+*.key.json
+
+# Processing state
+processing_status.json
+processing_report.txt
+validation_report.txt
+playlist.m3u
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug / temp files
+chunks_debug.txt
+chunks_info.txt
+chunk_analysis.txt
+first_chunk.txt

@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "screencastgen"
+version = "2.0.0"
+description = "Convert text documents to audio, highlighted-text video, and lip-synced video"
+requires-python = ">=3.9"
+dependencies = [
+    "PyPDF2>=3.0",
+]
+
+[project.optional-dependencies]
+qwen = [
+    "qwen-tts>=0.1",
+    "torch>=2.0",
+    "soundfile>=0.12",
+]
+pydub = ["pydub>=0.25"]
+epub = [
+    "pydub>=0.25",
+    "whisperx>=3.1",
+    "torch>=2.0",
+]
+highlight = [
+    "pydub>=0.25",
+    "whisperx>=3.1",
+    "moviepy>=2.0",
+    "Pillow>=10.0",
+    "torch>=2.0",
+]
+lipsync = [
+    "pydub>=0.25",
+    "whisperx>=3.1",
+    "moviepy>=2.0",
+    "Pillow>=10.0",
+    "torch>=2.0",
+    "f5-tts>=1.0",
+]
+server = [
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.20",
+    "python-multipart>=0.0.6",
+    "screencastgen[qwen,highlight,lipsync]",
+]
+all = ["screencastgen[highlight,lipsync,qwen,server]"]
+
+[tool.setuptools.packages.find]
+include = ["screencastgen*"]
+
+[project.scripts]
+screencastgen = "screencastgen.cli:main"
+screencastgen-server = "screencastgen.inference_server:main"
