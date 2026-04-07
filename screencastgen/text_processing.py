@@ -17,8 +17,8 @@ from .constants import (
 def preprocess_text(text: str) -> str:
     """Fix common PDF-extraction artefacts and prepare text for TTS."""
     # Normalize smart quotes
-    text = text.replace('"', '"').replace('"', '"')
-    text = text.replace(''', "'").replace(''', "'")
+    text = text.replace("\u201c", '"').replace("\u201d", '"')
+    text = text.replace("\u2018", "'").replace("\u2019", "'")
 
     # Remove code blocks - replace with a simple note
     text = re.sub(r"<code>.*?</code>", " See code example. ", text, flags=re.DOTALL)

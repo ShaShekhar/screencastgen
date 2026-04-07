@@ -1,21 +1,23 @@
-"""Lip-sync video generation using LatentSync.
-
-Imports are deferred so the module can be imported without heavy ML deps.
-"""
+"""Lip-sync video generation with provider dispatch."""
 
 import os
 import subprocess
 import tempfile
 
+from .backends.base import resolve_device
 
-def _resolve_device(device: str = "auto") -> str:
-    if device != "auto":
-        return device
-    try:
-        import torch
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    except ImportError:
-        return "cpu"
+DEFAULT_LIPSYNC_PROVIDER = "auto"
+_LIPSYNC_PROVIDER_NAMES = ["auto", "latentsync", "wav2lip"]
+
+
+def get_lipsync_provider_names():
+    """Return registered lip-sync provider names."""
+    return list(_LIPSYNC_PROVIDER_NAMES)
+
+
+def get_default_lipsync_provider() -> str:
+    """Return the default lip-sync provider."""
+    return DEFAULT_LIPSYNC_PROVIDER
 
 
 def _get_audio_duration(audio_path: str) -> float:
@@ -42,23 +44,17 @@ def generate_lipsync_video(
     audio_path: str,
     reference_video_path: str,
     output_path: str,
+    provider: str = DEFAULT_LIPSYNC_PROVIDER,
     device: str = "auto",
 ) -> str:
-    """Generate a lip-synced video from audio and a reference face video.
+    """Generate a lip-synced video from audio and a reference face video."""
+    if provider not in _LIPSYNC_PROVIDER_NAMES:
+        raise ValueError(
+            f"Unknown lip-sync provider {provider!r}. "
+            f"Choose from: {', '.join(get_lipsync_provider_names())}"
+        )
 
-    Uses LatentSync (ByteDance) for diffusion-based lip-sync generation.
-    Falls back to a simpler approach if LatentSync is not installed.
-
-    Args:
-        audio_path: Path to the audio file to lip-sync.
-        reference_video_path: Path to the reference face video (~10 seconds).
-        output_path: Path for the output lip-synced video.
-        device: Device to use (auto, cpu, cuda).
-
-    Returns:
-        Path to the generated video.
-    """
-    device = _resolve_device(device)
+    device = resolve_device(device)
 
     if device == "cpu":
         print("  WARNING: Lip-sync generation requires a GPU for reasonable speed.")
@@ -72,21 +68,7 @@ def generate_lipsync_video(
 
     try:
         _loop_video_to_duration(reference_video_path, audio_duration, looped_video)
-
-        # Try LatentSync first
-        try:
-            _run_latentsync(looped_video, audio_path, output_path, device)
-        except ImportError:
-            # Fallback: try Wav2Lip
-            try:
-                _run_wav2lip(looped_video, audio_path, output_path)
-            except ImportError:
-                raise ImportError(
-                    "No lip-sync backend found. Install LatentSync or Wav2Lip:\n"
-                    "  pip install latentsync   (recommended)\n"
-                    "  pip install wav2lip\n"
-                    "Or see: https://github.com/bytedance/LatentSync"
-                )
+        _run_provider(provider, looped_video, audio_path, output_path, device)
     finally:
         if os.path.exists(looped_video):
             os.unlink(looped_video)
@@ -94,16 +76,122 @@ def generate_lipsync_video(
     return output_path
 
 
-def _run_latentsync(video_path: str, audio_path: str, output_path: str, device: str):
-    """Run LatentSync lip-sync generation."""
-    from latentsync.inference import inference as latentsync_infer
+def _run_provider(
+    provider: str,
+    video_path: str,
+    audio_path: str,
+    output_path: str,
+    device: str,
+):
+    """Run the selected lip-sync provider."""
+    if provider == "auto":
+        try:
+            _run_latentsync(video_path, audio_path, output_path, device)
+            return
+        except ImportError:
+            try:
+                _run_wav2lip(video_path, audio_path, output_path)
+                return
+            except ImportError:
+                raise ImportError(
+                    "No lip-sync provider found. Install LatentSync:\n"
+                    "  git clone https://github.com/bytedance/LatentSync.git\n"
+                    "  cd LatentSync && pip install -e .\n"
+                    "Then download the checkpoint per the LatentSync README."
+                )
 
-    latentsync_infer(
-        video_path=video_path,
-        audio_path=audio_path,
-        output_path=output_path,
-        device=device,
+    if provider == "latentsync":
+        _run_latentsync(video_path, audio_path, output_path, device)
+        return
+
+    if provider == "wav2lip":
+        _run_wav2lip(video_path, audio_path, output_path)
+        return
+
+    raise ValueError(
+        f"Unknown lip-sync provider {provider!r}. "
+        f"Choose from: {', '.join(get_lipsync_provider_names())}"
     )
+
+
+def _find_latentsync_root() -> str:
+    """Locate the LatentSync repo directory.
+
+    Checks (in order):
+    1. LATENTSYNC_ROOT environment variable
+    2. The directory containing the installed ``latentsync`` package
+    """
+    env = os.environ.get("LATENTSYNC_ROOT")
+    if env and os.path.isdir(env):
+        return env
+
+    try:
+        import latentsync
+        pkg_dir = os.path.dirname(os.path.abspath(latentsync.__file__))
+        # The repo root is one level up from the latentsync package
+        return os.path.dirname(pkg_dir)
+    except ImportError:
+        raise ImportError(
+            "LatentSync not found. Install it with:\n"
+            "  git clone https://github.com/bytedance/LatentSync.git\n"
+            "  cd LatentSync && pip install -e .\n"
+            "Or set LATENTSYNC_ROOT=/path/to/LatentSync"
+        )
+
+
+def _run_latentsync(video_path: str, audio_path: str, output_path: str, device: str):
+    """Run LatentSync lip-sync generation as a subprocess.
+
+    Invokes LatentSync via ``python -m scripts.inference`` from the repo
+    root, avoiding sys.path manipulation and import conflicts.
+    See: https://github.com/bytedance/LatentSync
+    """
+    import sys
+
+    root = _find_latentsync_root()
+
+    config_path = os.path.join(root, "configs", "unet", "stage2_512.yaml")
+    ckpt_path = os.path.join(root, "checkpoints", "latentsync_unet.pt")
+
+    if not os.path.isfile(config_path):
+        raise FileNotFoundError(
+            f"LatentSync config not found at {config_path}\n"
+            f"Ensure LATENTSYNC_ROOT is set correctly or reinstall LatentSync."
+        )
+    if not os.path.isfile(ckpt_path):
+        raise FileNotFoundError(
+            f"LatentSync checkpoint not found at {ckpt_path}\n"
+            f"Download it per the LatentSync README:\n"
+            f"  https://github.com/bytedance/LatentSync#download-checkpoints"
+        )
+
+    cmd = [
+        sys.executable, "-m", "scripts.inference",
+        "--unet_config_path", config_path,
+        "--inference_ckpt_path", ckpt_path,
+        "--video_path", video_path,
+        "--audio_path", audio_path,
+        "--video_out_path", output_path,
+        "--inference_steps", "20",
+        "--guidance_scale", "1.5",
+        "--seed", "1247",
+        "--temp_dir", os.path.join(root, "temp"),
+        "--enable_deepcache",
+    ]
+
+    result = subprocess.run(
+        cmd, cwd=root, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"LatentSync inference failed (exit code {result.returncode}):\n"
+            f"{result.stderr}"
+        )
+
+    if not os.path.isfile(output_path):
+        raise RuntimeError(
+            f"LatentSync completed but output file not found at {output_path}"
+        )
 
 
 def _run_wav2lip(video_path: str, audio_path: str, output_path: str):

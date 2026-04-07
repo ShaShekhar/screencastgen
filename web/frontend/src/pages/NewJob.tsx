@@ -16,9 +16,8 @@ import {
 } from "../types";
 
 const DEFAULT_AUDIO: AudioConfig = {
-  voice: "en-US-Chirp3-HD-Algenib",
   language: "en-US",
-  encoding: "MP3",
+  aligner: "whisperx",
 };
 
 const DEFAULT_HIGHLIGHT: HighlightConfig = {
@@ -32,6 +31,8 @@ const DEFAULT_HIGHLIGHT: HighlightConfig = {
 const DEFAULT_LIPSYNC: LipsyncConfig = {
   ref_audio_file_id: "",
   ref_video_file_id: "",
+  aligner: "whisperx",
+  lipsync_provider: "auto",
   device: "auto",
   face_position: "left",
   font_size: 32,
@@ -130,6 +131,7 @@ export default function NewJob() {
             <div className="space-y-6">
               <VoiceSettings
                 config={highlightConfig}
+                showAligner
                 onChange={(c) =>
                   setHighlightConfig({ ...highlightConfig, ...c })
                 }

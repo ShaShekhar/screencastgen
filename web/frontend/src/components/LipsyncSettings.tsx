@@ -8,6 +8,14 @@ interface Props {
 }
 
 const FACE_POSITIONS = ["left", "right", "center"];
+const ALIGNERS = [
+  { value: "whisperx", label: "WhisperX" },
+];
+const LIPSYNC_PROVIDERS = [
+  { value: "auto", label: "Auto" },
+  { value: "latentsync", label: "LatentSync" },
+  { value: "wav2lip", label: "Wav2Lip" },
+];
 
 export default function LipsyncSettings({ config, onChange }: Props) {
   const [audioName, setAudioName] = useState<string | null>(null);
@@ -84,6 +92,42 @@ export default function LipsyncSettings({ config, onChange }: Props) {
             </label>
           ))}
         </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Aligner
+        </label>
+        <select
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          value={config.aligner || "whisperx"}
+          onChange={(e) => onChange({ ...config, aligner: e.target.value })}
+        >
+          {ALIGNERS.map((aligner) => (
+            <option key={aligner.value} value={aligner.value}>
+              {aligner.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Lip-Sync Provider
+        </label>
+        <select
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          value={config.lipsync_provider || "auto"}
+          onChange={(e) =>
+            onChange({ ...config, lipsync_provider: e.target.value })
+          }
+        >
+          {LIPSYNC_PROVIDERS.map((provider) => (
+            <option key={provider.value} value={provider.value}>
+              {provider.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div>

@@ -5,16 +5,7 @@ Imports are deferred so the module can be imported without qwen-tts/torch instal
 
 from typing import Optional
 
-
-def _resolve_device(device: str = "auto") -> str:
-    if device != "auto":
-        return device
-    try:
-        import torch
-
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    except ImportError:
-        return "cpu"
+from .base import BackendArg, BackendSpec, resolve_device
 
 
 _MODEL_ALIASES = {
@@ -61,7 +52,7 @@ class QwenTTS:
         self.ref_audio_path = ref_audio_path
         self.ref_text = ref_text
         self._language = _LANG_MAP.get(language.lower(), "English")
-        self.device = _resolve_device(device)
+        self.device = resolve_device(device)
         self._model = None
 
     @property
@@ -107,3 +98,67 @@ class QwenTTS:
             )
 
         sf.write(output_path, wavs[0], sr)
+
+
+def _build_kwargs(args, invocation: str):
+    return {
+        "model_name": getattr(args, "model", None),
+        "ref_audio_path": getattr(args, "ref_audio", None),
+        "ref_text": getattr(args, "ref_text", None),
+        "language": getattr(args, "language", "en-US"),
+        "device": getattr(args, "device", "auto"),
+    }
+
+
+def _validate(args, invocation: str) -> None:
+    if invocation == "lipsync" and not getattr(args, "ref_audio", None):
+        raise ValueError("Error: --ref-audio is required for the qwen backend in lipsync mode")
+
+
+def _download_models(args) -> None:
+    model_name = _MODEL_ALIASES.get(
+        getattr(args, "model", None),
+        getattr(args, "model", None),
+    ) or DEFAULT_QWEN_MODEL
+
+    print(f"\n--- Downloading Qwen3-TTS model: {model_name} ---")
+    try:
+        import torch
+        from qwen_tts import Qwen3TTSModel
+
+        print(f"Loading {model_name}...")
+        Qwen3TTSModel.from_pretrained(
+            model_name,
+            device_map="cpu",
+            dtype=torch.float32,
+        )
+        print("Qwen3-TTS model ready.")
+    except ImportError:
+        print("ERROR: qwen-tts not installed. Run: pip install 'screencastgen[qwen]'")
+    except Exception as exc:
+        print(f"ERROR downloading Qwen3-TTS model: {exc}")
+
+
+_MODEL_ARG = BackendArg(
+    ("--model",),
+    {
+        "default": None,
+        "help": "Model name/path for local backends (e.g. 0.6B, 1.7B for qwen)",
+    },
+)
+
+
+SPEC = BackendSpec(
+    name="qwen",
+    module_path=__name__,
+    class_name="QwenTTS",
+    contexts=frozenset({"cli", "server"}),
+    capabilities=frozenset({"local", "voice_clone"}),
+    extra_args=(_MODEL_ARG,),
+    download_args=(
+        BackendArg(_MODEL_ARG.flags, dict(_MODEL_ARG.kwargs), contexts=frozenset({"download"})),
+    ),
+    build_kwargs=_build_kwargs,
+    validate=_validate,
+    download_models=_download_models,
+)

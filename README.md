@@ -2,7 +2,7 @@
 
 Convert text documents (PDF, EPUB, plain text, and more) to audio files, highlighted-text videos, or lip-synced talking-head videos.
 
-Supports multiple TTS backends (local or remote GPU inference server) with optional voice cloning.
+Supports pluggable TTS backends, alignment providers, and lip-sync providers. The default implementations are Qwen/F5 for TTS, WhisperX for alignment, and LatentSync or Wav2Lip for lip-sync.
 
 ## Installation
 
@@ -40,9 +40,12 @@ screencastgen highlight MyBook.pdf --backend remote --tts-server-url http://gpu-
 
 # Lip-sync video with voice cloning
 screencastgen lipsync MyBook.pdf --backend f5 --ref-audio voice.wav --ref-video face.mp4
+screencastgen lipsync MyBook.pdf --backend f5 --ref-audio voice.wav --ref-video face.mp4 --lipsync-provider latentsync
 
 # Pre-download model weights
-screencastgen download-models --qwen
+screencastgen download-models --backend qwen
+screencastgen download-models --backend qwen --model 1.7B
+screencastgen download-models --package whisperx --package latentsync
 screencastgen download-models --all
 ```
 
@@ -73,12 +76,13 @@ screencastgen audio MyBook.pdf --backend qwen --ref-audio voice.wav
 
 ### Remote GPU Server
 
-Split GPU workloads onto a separate machine. The GPU VM runs all ML models (TTS, WhisperX alignment, lip-sync). The CPU VM handles everything else (web app, DB, orchestration).
+Split GPU workloads onto a separate machine. The GPU VM runs all ML models (TTS, alignment, lip-sync). The CPU VM handles everything else (web app, DB, orchestration).
 
 **GPU VM:**
 ```bash
 pip install -e ".[server]"
 screencastgen-server --backend qwen --device cuda
+screencastgen-server --backend qwen --device cuda --aligner whisperx --lipsync-provider latentsync
 
 # With voice cloning
 screencastgen-server --backend qwen --device cuda --ref-audio voice.wav --model 1.7B
@@ -93,9 +97,11 @@ screencastgen highlight MyBook.pdf --backend remote --tts-server-url http://gpu-
 
 The inference server exposes these endpoints:
 - `POST /synthesize` — Text to audio (TTS)
-- `POST /align` — Audio + text to word-level timestamps (WhisperX)
-- `POST /lipsync` — Audio + reference video to lip-synced video (LatentSync)
+- `POST /align` — Audio + text to word-level timestamps (selected alignment provider)
+- `POST /lipsync` — Audio + reference video to lip-synced video (selected lip-sync provider)
 - `GET /health` — Backend info and readiness
+
+`GET /health` also reports the loaded TTS backend plus the server defaults for `aligner` and `lipsync_provider`.
 
 ```
 CPU VM                                        GPU VM (screencastgen-server)
@@ -104,9 +110,9 @@ CPU VM                                        GPU VM (screencastgen-server)
 | Chunking & validation    | ------------> |   Qwen3-TTS on CUDA     |
 | RemoteTTS.synthesize()   |               |                          |
 | remote_align_chunk()     | ------------> | POST /align              |
-| remote_generate_lipsync()| <------------ |   WhisperX on CUDA       |
+| remote_generate_lipsync()| <------------ |   Alignment provider     |
 | Video compositing        |               | POST /lipsync            |
-| Audio concatenation      |               |   LatentSync on CUDA     |
+| Audio concatenation      |               |   Lip-sync provider      |
 | Web app / Celery / DB    |               +--------------------------+
 +--------------------------+
 ```
@@ -129,6 +135,7 @@ PDF to highlighted-text video with synchronized audio.
 ```bash
 pip install -e ".[highlight]"
 screencastgen highlight MyBook.pdf -o output.mp4
+screencastgen highlight MyBook.pdf -o output.mp4 --aligner whisperx
 ```
 
 ### Lip-sync (`screencastgen lipsync`)
@@ -137,8 +144,37 @@ PDF to talking-head video with voice cloning and lip synchronization.
 
 ```bash
 pip install -e ".[lipsync]"
+
+# Install LatentSync (required for lip-sync generation)
+git clone https://github.com/bytedance/LatentSync.git
+cd LatentSync
+pip install -e .
+# Download the checkpoint per the LatentSync README:
+#   https://github.com/bytedance/LatentSync#download-checkpoints
+# -> LatentSync/checkpoints/latentsync_unet.pt
+cd ..
+
 screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4
+screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4 --lipsync-provider wav2lip
 ```
+
+## Provider Model
+
+The runtime is now split into three independently selectable layers:
+
+- TTS backend: selected with `--backend` and implemented under `screencastgen/backends/`
+- Alignment provider: selected with `--aligner` and dispatched from `screencastgen/aligner.py`
+- Lip-sync provider: selected with `--lipsync-provider` and dispatched from `screencastgen/lipsync.py`
+
+The central pipeline code no longer hardcodes constructor branches for individual TTS models, and it now passes alignment/lip-sync provider names through both local execution and the remote GPU server.
+
+Current built-in providers:
+
+| Layer      | Choices |
+|------------|---------|
+| TTS        | `qwen`, `f5`, `remote` |
+| Alignment  | `whisperx` |
+| Lip-sync   | `auto`, `latentsync`, `wav2lip` |
 
 ## CLI Options
 
@@ -160,11 +196,19 @@ TTS backend options (audio, highlight, lipsync):
   --ref-audio             Reference audio for voice cloning backends
   --ref-text              Transcript of reference audio
   --tts-server-url        URL of GPU inference server (for --backend remote)
+  --aligner               Alignment provider (default: whisperx)
 
 Video options (highlight, lipsync):
   --font-size             Font size (default: 32)
   --resolution            Video resolution WxH (default: 1280x720)
   --fps                   Frame rate (default: 24)
+  --lipsync-provider      Lip-sync provider: auto, latentsync, wav2lip (default: auto)
+
+Model download options:
+  --backend               Backend whose models should be downloaded; repeat as needed
+  --package               Downloadable package/model family to preload; repeat as needed
+  --all                   Download all registered models/packages
+  --model                 Backend-specific model selector (for qwen)
 ```
 
 ## How It Works
@@ -178,8 +222,10 @@ Video options (highlight, lipsync):
 7. **Concatenate** all chunk files into a single output file (pydub or ffmpeg)
 
 For highlight/lipsync pipelines, additional steps run after synthesis:
-- **Align** audio with WhisperX for word-level timestamps
-- **Render** highlighted text video or lip-synced talking-head video
+- **Align** audio with the selected alignment provider for word-level timestamps
+- **Render** highlighted text video or lip-synced talking-head video with the selected provider
+
+The remote GPU path preserves the same abstraction: the CPU-side client sends provider names to the server, and the server executes its configured default provider or an explicit per-request override.
 
 The status file makes the process fully resumable -- if interrupted, re-run the same command and only unprocessed chunks will be re-synthesized.
 
@@ -214,16 +260,17 @@ screencastgen/
   concatenator.py       Audio merge (pydub / ffmpeg fallback)
   constants.py          All defaults and limits
   types.py              TTSBackend protocol, WordTiming, AlignedChunk
-  aligner.py            WhisperX word-level alignment
-  lipsync.py            LatentSync / Wav2Lip lip-sync generation
+  aligner.py            Alignment provider dispatch
+  lipsync.py            Lip-sync provider dispatch
   inference_server.py   FastAPI GPU inference server
   remote_gpu.py         HTTP client for remote alignment and lip-sync
   models.py             Model download and cache management
   backends/
-    __init__.py         Backend registry and factory
-    qwen_tts.py         Qwen3-TTS backend
-    f5_tts.py           F5-TTS backend
-    remote_tts.py       Remote TTS backend (HTTP client)
+    __init__.py         Backend registry, spec loading, and factory
+    base.py             Shared backend metadata and helpers
+    qwen_backend.py     Qwen3-TTS backend + spec
+    f5_tts.py           F5-TTS backend shim + spec
+    remote_tts.py       Remote TTS backend + spec (HTTP client)
   highlight_renderer.py Text highlight frame renderer
   video_composer.py     Video composition (highlight + lipsync)
 web/                    Full-stack web application
@@ -237,8 +284,8 @@ pyproject.toml          Package metadata and entry points
 | Core            | PyPDF2                                          |
 | Qwen3 TTS      | qwen-tts, torch, soundfile                      |
 | Concatenation   | pydub (preferred) or ffmpeg CLI                 |
-| Highlight video | whisperx, moviepy, Pillow, torch                |
-| Lip-sync video  | f5-tts, latentsync (or wav2lip), ffmpeg/ffprobe |
+| Highlight video | alignment provider deps (currently whisperx), moviepy, Pillow, torch |
+| Lip-sync video  | f5-tts, lip-sync provider deps (currently [LatentSync](https://github.com/bytedance/LatentSync) or Wav2Lip), ffmpeg/ffprobe |
 | GPU server      | fastapi, uvicorn, python-multipart              |
 | Web app         | fastapi, sqlalchemy, celery, redis, asyncpg     |
 | Web frontend    | react, react-router-dom, axios, tailwindcss     |

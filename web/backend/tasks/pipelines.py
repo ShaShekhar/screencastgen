@@ -10,7 +10,7 @@ from .celery_app import celery_app
 from ..config import settings
 from ..database import get_sync_session
 from ..models import Job, JobStatus, UploadedFile
-from ..services.storage import get_upload_abs_path, get_output_dir
+from ..services.storage import get_output_abs_path, get_upload_abs_path, get_output_dir
 from .progress import ProgressBridge
 
 from screencastgen.constants import (
@@ -21,6 +21,8 @@ from screencastgen.constants import (
     DEFAULT_VIDEO_HEIGHT,
     DEFAULT_VIDEO_WIDTH,
 )
+from screencastgen.aligner import get_default_alignment_provider
+from screencastgen.lipsync import get_default_lipsync_provider
 
 
 def _build_audio_args(job: Job, pdf_path: str, output_dir: str) -> argparse.Namespace:
@@ -40,6 +42,7 @@ def _build_audio_args(job: Job, pdf_path: str, output_dir: str) -> argparse.Name
         ref_text=cfg.get("ref_text"),
         device=cfg.get("device", "auto"),
         tts_server_url=cfg.get("tts_server_url", settings.TTS_SERVER_URL),
+        aligner=cfg.get("aligner", get_default_alignment_provider()),
         status_file=DEFAULT_STATUS_FILE,
         clean=False,
         verbose=True,
@@ -64,6 +67,7 @@ def _build_highlight_args(job: Job, pdf_path: str, output_dir: str) -> argparse.
         ref_text=cfg.get("ref_text"),
         device=cfg.get("device", "auto"),
         tts_server_url=cfg.get("tts_server_url", settings.TTS_SERVER_URL),
+        aligner=cfg.get("aligner", get_default_alignment_provider()),
         status_file=DEFAULT_STATUS_FILE,
         clean=False,
         verbose=True,
@@ -105,6 +109,8 @@ def _build_lipsync_args(job: Job, pdf_path: str, output_dir: str, db_session) ->
         ref_video=ref_video_path,
         ref_text=cfg.get("ref_text"),
         device=cfg.get("device", "auto"),
+        aligner=cfg.get("aligner", get_default_alignment_provider()),
+        lipsync_provider=cfg.get("lipsync_provider", get_default_lipsync_provider()),
         face_position=cfg.get("face_position", "left"),
         font_size=cfg.get("font_size", DEFAULT_FONT_SIZE),
         resolution=f"{cfg.get('width', DEFAULT_VIDEO_WIDTH)}x{cfg.get('height', DEFAULT_VIDEO_HEIGHT)}",
@@ -170,9 +176,15 @@ def run_pipeline_task(self, job_id: str):
         try:
             exit_code = pipeline_func(args)
             if exit_code == 0:
-                job.status = JobStatus.completed
-                job.progress_phase = "done"
-                job.output_path = args.output
+                output_path = get_output_abs_path(uuid.UUID(job_id), args.output)
+                if os.path.isfile(output_path):
+                    job.status = JobStatus.completed
+                    job.progress_phase = "done"
+                    job.error_message = None
+                    job.output_path = args.output
+                else:
+                    job.status = JobStatus.failed
+                    job.error_message = f"Pipeline completed without producing output: {args.output}"
             else:
                 job.status = JobStatus.failed
                 job.error_message = f"Pipeline returned exit code {exit_code}"

@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, UploadFile
 
 from ..config import settings
-from ..database import get_async_session, async_session_factory
+from ..database import async_session_factory
 from ..models import UploadedFile
 from ..schemas import UploadResponse
 from ..services.storage import save_upload
@@ -25,7 +25,10 @@ async def upload_file(file: UploadFile):
         raise HTTPException(413, f"File too large (max {settings.MAX_UPLOAD_SIZE_MB} MB)")
 
     file_id = uuid.uuid4()
-    stored_path = save_upload(content, file.filename, file_id)
+    try:
+        stored_path = save_upload(content, file.filename, file_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
     db_file = UploadedFile(
         id=file_id,

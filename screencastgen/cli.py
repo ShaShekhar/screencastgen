@@ -59,25 +59,24 @@ def _add_common_args(p: argparse.ArgumentParser) -> None:
 
 def _add_tts_backend_args(p: argparse.ArgumentParser) -> None:
     """Add arguments for TTS backend selection."""
-    from .backends import BACKEND_NAMES
+    from .backends import (
+        get_backend_names,
+        get_default_backend_name,
+        register_backend_args,
+    )
 
     p.add_argument(
         "--backend",
-        default="qwen",
-        choices=BACKEND_NAMES,
-        help="TTS backend (default: qwen)",
+        default=get_default_backend_name(context="cli"),
+        choices=get_backend_names(context="cli"),
+        help="TTS backend",
     )
     p.add_argument("--device", default="auto", help="Device for local models: auto, cpu, or cuda (default: auto)")
     p.add_argument("--voice", default=None, help="Voice name (backend-specific)")
-    p.add_argument("--model", default=None, help="Model name/path for local backends (e.g. 0.6B, 1.7B for qwen)")
-    # Voice cloning (qwen, f5)
+    # Common backend options
     p.add_argument("--ref-audio", default=None, help="Reference audio for voice cloning backends")
     p.add_argument("--ref-text", default=None, help="Transcript of reference audio")
-    # Remote backend
-    p.add_argument(
-        "--tts-server-url", default="http://localhost:8100",
-        help="URL of the GPU inference server (for --backend remote, default: http://localhost:8100)",
-    )
+    register_backend_args(p, context="cli")
 
 
 def _add_video_args(p: argparse.ArgumentParser) -> None:
@@ -89,6 +88,34 @@ def _add_video_args(p: argparse.ArgumentParser) -> None:
         help=f"Video resolution WxH (default: {DEFAULT_VIDEO_WIDTH}x{DEFAULT_VIDEO_HEIGHT})",
     )
     p.add_argument("--fps", type=int, default=DEFAULT_VIDEO_FPS, help=f"Frame rate (default: {DEFAULT_VIDEO_FPS})")
+
+
+def _add_provider_args(p: argparse.ArgumentParser, *, include_lipsync: bool = False) -> None:
+    """Add alignment and lip-sync provider selection args."""
+    from .aligner import (
+        get_alignment_provider_names,
+        get_default_alignment_provider,
+    )
+
+    p.add_argument(
+        "--aligner",
+        default=get_default_alignment_provider(),
+        choices=get_alignment_provider_names(),
+        help="Alignment provider",
+    )
+
+    if include_lipsync:
+        from .lipsync import (
+            get_lipsync_provider_names,
+            get_default_lipsync_provider,
+        )
+
+        p.add_argument(
+            "--lipsync-provider",
+            default=get_default_lipsync_provider(),
+            choices=get_lipsync_provider_names(),
+            help="Lip-sync provider",
+        )
 
 
 def _parse_resolution(res_str: str) -> tuple:
@@ -122,6 +149,7 @@ def _build_parser() -> argparse.ArgumentParser:
     hl_p = sub.add_parser("highlight", help="Create highlighted-text video from PDF")
     _add_common_args(hl_p)
     _add_tts_backend_args(hl_p)
+    _add_provider_args(hl_p)
     _add_video_args(hl_p)
     hl_p.add_argument("-o", "--output", help="Output filename (default: <pdf-stem>_highlight.epub)")
     hl_p.add_argument(
@@ -133,6 +161,7 @@ def _build_parser() -> argparse.ArgumentParser:
     ls_p = sub.add_parser("lipsync", help="Create lip-synced video with voice cloning")
     _add_common_args(ls_p)
     _add_tts_backend_args(ls_p)
+    _add_provider_args(ls_p, include_lipsync=True)
     _add_video_args(ls_p)
     ls_p.add_argument("-o", "--output", help="Output filename (default: <pdf-stem>_lipsync.epub)")
     ls_p.add_argument("--ref-video", required=True, help="Reference face video clip (~10s)")
@@ -146,13 +175,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     # --- download-models ---
+    from .models import register_model_download_args
+
     dm_p = sub.add_parser("download-models", help="Pre-download ML model weights")
-    dm_p.add_argument("--whisperx", action="store_true", help="Download WhisperX models")
-    dm_p.add_argument("--f5-tts", action="store_true", help="Download F5-TTS models")
-    dm_p.add_argument("--latentsync", action="store_true", help="Download LatentSync models")
-    dm_p.add_argument("--qwen", action="store_true", help="Download Qwen3-TTS 0.6B model")
-    dm_p.add_argument("--qwen-1.7b", dest="qwen_1_7b", action="store_true", help="Download Qwen3-TTS 1.7B model")
-    dm_p.add_argument("--all", action="store_true", help="Download all models")
+    register_model_download_args(dm_p)
 
     return p
 
@@ -161,44 +187,15 @@ def _build_parser() -> argparse.ArgumentParser:
 # Backend factory
 # ---------------------------------------------------------------------------
 
-def _create_tts_backend(args):
+def _create_tts_backend(args, invocation: str):
     """Build the appropriate TTSBackend from parsed CLI args."""
-    from .backends import create_backend
+    from .backends import create_backend_from_args
 
-    name = args.backend
-
-    if name == "qwen":
-        return create_backend(
-            name,
-            model_name=getattr(args, "model", None),
-            ref_audio_path=getattr(args, "ref_audio", None),
-            ref_text=getattr(args, "ref_text", None),
-            language=args.language,
-            device=getattr(args, "device", "auto"),
-        )
-
-    if name == "f5":
-        ref_audio = getattr(args, "ref_audio", None)
-        if not ref_audio:
-            print("Error: --ref-audio is required for the f5 backend", file=sys.stderr)
-            sys.exit(1)
-        return create_backend(
-            name,
-            ref_audio_path=ref_audio,
-            ref_text=getattr(args, "ref_text", None),
-            device=getattr(args, "device", "auto"),
-        )
-
-    if name == "remote":
-        return create_backend(
-            name,
-            server_url=getattr(args, "tts_server_url", "http://localhost:8100"),
-            language=args.language,
-        )
-
-    # Should not reach here thanks to argparse choices, but just in case
-    print(f"Error: unknown backend {name!r}", file=sys.stderr)
-    sys.exit(1)
+    try:
+        return create_backend_from_args(args, invocation=invocation)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -359,15 +356,23 @@ def _synthesize_chunks(chunks_to_process, total_chunks, tracker, backend, output
     return processed_count
 
 
+def _has_failed_chunks(tracker) -> bool:
+    """Return True when any chunk failed validation or synthesis."""
+    return tracker.get_summary()["failed"] > 0
+
+
 def _align_chunks(chunks, tracker, args, gpu_server_url=None, page_map=None):
-    """Run WhisperX alignment on all processed chunks. Returns list of AlignedChunk.
+    """Run alignment on all processed chunks. Returns list of AlignedChunk.
 
     When *gpu_server_url* is set, alignment is offloaded to the GPU server.
     *page_map*, if provided, is ``{chunk_num: [page_numbers]}``.
     """
     from .types import AlignedChunk, WordTiming
 
+    from .aligner import get_default_alignment_provider
+
     use_remote = gpu_server_url is not None
+    aligner_name = getattr(args, "aligner", get_default_alignment_provider())
 
     aligned_chunks = []
     for i, chunk in enumerate(chunks):
@@ -392,10 +397,17 @@ def _align_chunks(chunks, tracker, args, gpu_server_url=None, page_map=None):
                         audio_path, chunk,
                         server_url=gpu_server_url,
                         language=args.language,
+                        provider=aligner_name,
                     )
                 else:
                     from .aligner import align_chunk
-                    words = align_chunk(audio_path, chunk, language=args.language)
+                    words = align_chunk(
+                        audio_path,
+                        chunk,
+                        provider=aligner_name,
+                        language=args.language,
+                        device=getattr(args, "device", "auto"),
+                    )
                 tracker.mark_aligned(chunk_num, words)
             except Exception as exc:
                 print(f"  Alignment error for chunk {chunk_num}: {exc}")
@@ -443,7 +455,7 @@ def _validation_limits(backend):
 
 def run_audio_pipeline(args) -> int:
     """Audio-only pipeline — works with any TTS backend."""
-    backend = _create_tts_backend(args)
+    backend = _create_tts_backend(args, invocation="audio")
     ext = backend.output_format
     output_file = args.output or (Path(args.pdf).stem + f".{ext}")
     output_dir = args.output_dir
@@ -461,6 +473,9 @@ def run_audio_pipeline(args) -> int:
         max_tts_bytes=max_tts, sentence_warn_bytes=sent_warn,
     )
     _synthesize_chunks(chunks_to_process, len(chunks), tracker, backend, output_dir, args.verbose)
+    if _has_failed_chunks(tracker):
+        print("Audio pipeline failed: one or more chunks did not complete.", file=sys.stderr)
+        return 1
 
     if not args.no_concat:
         summary = tracker.get_summary()
@@ -472,8 +487,16 @@ def run_audio_pipeline(args) -> int:
                 print(f"Done: {dest}")
             except FileNotFoundError as exc:
                 print(f"Skipping concatenation: {exc}")
+                return 1
             except Exception as exc:
                 print(f"Concatenation failed: {exc}")
+                return 1
+            if not os.path.isfile(dest):
+                print(f"Concatenation failed: output file missing at {dest}", file=sys.stderr)
+                return 1
+        else:
+            print("Audio pipeline failed: no synthesized chunks were produced.", file=sys.stderr)
+            return 1
 
     return 0
 
@@ -482,7 +505,7 @@ def run_highlight_pipeline(args) -> int:
     """Highlighted-text pipeline — EPUB3 (default) or MP4 video."""
     fmt = getattr(args, "format", "epub")
 
-    backend = _create_tts_backend(args)
+    backend = _create_tts_backend(args, invocation="highlight")
     output_dir = args.output_dir
     os.makedirs(output_dir, exist_ok=True)
 
@@ -507,6 +530,9 @@ def run_highlight_pipeline(args) -> int:
         max_tts_bytes=max_tts, sentence_warn_bytes=sent_warn,
     )
     _synthesize_chunks(chunks_to_process, len(chunks), tracker, backend, output_dir, args.verbose)
+    if _has_failed_chunks(tracker):
+        print("Highlight pipeline failed: one or more chunks did not complete.", file=sys.stderr)
+        return 1
 
     # -- alignment --
     print("\n=== ALIGNMENT ===")
@@ -586,18 +612,11 @@ def _build_highlight_mp4(args, aligned_chunks, output_dir) -> int:
 def run_lipsync_pipeline(args) -> int:
     """Lip-synced pipeline — EPUB3 (default) or MP4 video."""
     fmt = getattr(args, "format", "epub")
-
-    # Default to f5 backend for lipsync if not explicitly set
-    if not hasattr(args, "backend"):
-        args.backend = "f5"
-
-    # Require ref-audio for lipsync (unless remote — ref is configured server-side)
     ref_audio = getattr(args, "ref_audio", None)
-    if not ref_audio and args.backend != "remote":
-        print("Error: --ref-audio is required for lipsync pipeline", file=sys.stderr)
-        return 1
+    from .lipsync import get_default_lipsync_provider
 
-    backend = _create_tts_backend(args)
+    lipsync_provider = getattr(args, "lipsync_provider", get_default_lipsync_provider())
+    backend = _create_tts_backend(args, invocation="lipsync")
     gpu_url = _gpu_server_url(args)
 
     output_dir = args.output_dir
@@ -633,6 +652,9 @@ def run_lipsync_pipeline(args) -> int:
         max_tts_bytes=max_tts, sentence_warn_bytes=sent_warn,
     )
     _synthesize_chunks(chunks_to_process, len(chunks), tracker, backend, output_dir, args.verbose)
+    if _has_failed_chunks(tracker):
+        print("Lipsync pipeline failed: one or more chunks did not complete.", file=sys.stderr)
+        return 1
 
     # Align
     print("\n=== ALIGNMENT ===")
@@ -649,6 +671,7 @@ def run_lipsync_pipeline(args) -> int:
     # Lip-sync per chunk
     print("\n=== LIP-SYNC GENERATION ===")
     lipsync_clips = []
+    lipsync_failed = False
     for ac in aligned_chunks:
         video_path = os.path.join(output_dir, VIDEO_CHUNK_FILE_PATTERN.format(num=ac.chunk_num))
         if tracker.is_video_rendered(ac.chunk_num):
@@ -666,6 +689,7 @@ def run_lipsync_pipeline(args) -> int:
                     reference_video_path=args.ref_video,
                     output_path=video_path,
                     server_url=gpu_url,
+                    provider=lipsync_provider,
                 )
             else:
                 from .lipsync import generate_lipsync_video
@@ -673,12 +697,18 @@ def run_lipsync_pipeline(args) -> int:
                     audio_path=ac.audio_path,
                     reference_video_path=args.ref_video,
                     output_path=video_path,
+                    provider=lipsync_provider,
                     device=args.device,
                 )
             tracker.mark_video_rendered(ac.chunk_num, video_path)
             lipsync_clips.append(video_path)
         except Exception as exc:
             print(f"  Lip-sync error for chunk {ac.chunk_num}: {exc}")
+            lipsync_failed = True
+
+    if lipsync_failed:
+        print("Lipsync pipeline failed: one or more video chunks did not render.", file=sys.stderr)
+        return 1
 
     if fmt == "epub":
         return _build_lipsync_epub(args, aligned_chunks, lipsync_clips, tracker, output_dir)
@@ -772,14 +802,9 @@ def _build_lipsync_mp4(args, aligned_chunks, lipsync_clips, output_dir) -> int:
 
 def run_download_models(args) -> int:
     """Download ML model weights."""
-    from .models import download_models
-    download_models(
-        whisperx=args.all or args.whisperx,
-        f5_tts=args.all or args.f5_tts,
-        latentsync=args.all or args.latentsync,
-        qwen=args.all or args.qwen,
-        qwen_1_7b=args.qwen_1_7b,
-    )
+    from .models import download_selected_models
+
+    download_selected_models(args)
     return 0
 
 

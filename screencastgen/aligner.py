@@ -1,38 +1,37 @@
-"""Word-level audio alignment using WhisperX.
+"""Word-level audio alignment with provider dispatch.
 
-Imports are deferred so the module can be imported without torch installed.
+Imports are deferred so the module can be imported without heavy ML deps.
 """
 
 from typing import List
 
+from .backends.base import resolve_device
 from .types import WordTiming
 
-
-def _resolve_device(device: str = "auto") -> str:
-    if device != "auto":
-        return device
-    try:
-        import torch
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    except ImportError:
-        return "cpu"
+DEFAULT_ALIGNMENT_PROVIDER = "whisperx"
 
 
-def align_chunk(
+def get_alignment_provider_names() -> List[str]:
+    """Return registered alignment provider names."""
+    return [DEFAULT_ALIGNMENT_PROVIDER]
+
+
+def get_default_alignment_provider() -> str:
+    """Return the default alignment provider."""
+    return DEFAULT_ALIGNMENT_PROVIDER
+
+
+def _align_with_whisperx(
     audio_path: str,
     text: str,
     *,
     language: str = "en-US",
     device: str = "auto",
 ) -> List[WordTiming]:
-    """Align *text* against *audio_path* and return per-word timestamps.
-
-    Uses WhisperX: transcribe with Whisper, then refine timestamps
-    via wav2vec2 forced alignment.
-    """
+    """Align with WhisperX using transcription plus forced alignment."""
     import whisperx
 
-    device = _resolve_device(device)
+    device = resolve_device(device)
     # WhisperX uses 2-letter language codes
     lang_code = language.split("-")[0]
 
@@ -69,3 +68,26 @@ def align_chunk(
                     ))
 
     return words
+
+
+def align_chunk(
+    audio_path: str,
+    text: str,
+    *,
+    provider: str = DEFAULT_ALIGNMENT_PROVIDER,
+    language: str = "en-US",
+    device: str = "auto",
+) -> List[WordTiming]:
+    """Align *text* against *audio_path* via the selected provider."""
+    if provider != DEFAULT_ALIGNMENT_PROVIDER:
+        raise ValueError(
+            f"Unknown alignment provider {provider!r}. "
+            f"Choose from: {', '.join(get_alignment_provider_names())}"
+        )
+
+    return _align_with_whisperx(
+        audio_path,
+        text,
+        language=language,
+        device=device,
+    )

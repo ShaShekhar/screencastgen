@@ -5,17 +5,8 @@ Imports are deferred so the module can be imported without torch/f5-tts installe
 
 from typing import Optional
 
+from .backends.base import resolve_device
 from .constants import DEFAULT_CLONE_CHUNK_BYTES
-
-
-def _resolve_device(device: str = "auto") -> str:
-    if device != "auto":
-        return device
-    try:
-        import torch
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    except ImportError:
-        return "cpu"
 
 
 class F5TTSBackend:
@@ -29,7 +20,7 @@ class F5TTSBackend:
     ):
         self.ref_audio_path = ref_audio_path
         self.ref_text = ref_text
-        self.device = _resolve_device(device)
+        self.device = resolve_device(device)
         self._model = None
 
     @property

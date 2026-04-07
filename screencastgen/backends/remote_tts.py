@@ -5,6 +5,8 @@ Used on the CPU VM to offload TTS to a GPU VM running ``screencastgen-server``.
 
 from typing import Optional
 
+from .base import BackendArg, BackendSpec
+
 
 class RemoteTTS:
     """TTSBackend that calls a remote screencastgen inference server."""
@@ -81,3 +83,33 @@ class RemoteTTS:
 
         with open(output_path, "wb") as f:
             f.write(audio_bytes)
+
+
+def _build_kwargs(args, invocation: str):
+    return {
+        "server_url": getattr(args, "tts_server_url", "http://localhost:8100"),
+        "language": getattr(args, "language", "en-US"),
+    }
+
+
+SPEC = BackendSpec(
+    name="remote",
+    module_path=__name__,
+    class_name="RemoteTTS",
+    contexts=frozenset({"cli"}),
+    capabilities=frozenset({"remote", "server_managed_reference"}),
+    extra_args=(
+        BackendArg(
+            ("--tts-server-url",),
+            {
+                "default": "http://localhost:8100",
+                "help": (
+                    "URL of the GPU inference server "
+                    "(for --backend remote, default: http://localhost:8100)"
+                ),
+            },
+            contexts=frozenset({"cli"}),
+        ),
+    ),
+    build_kwargs=_build_kwargs,
+)

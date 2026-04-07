@@ -1,4 +1,4 @@
-"""GPU inference server — serves TTS, WhisperX alignment, and lip-sync.
+"""GPU inference server — serves TTS, alignment, and lip-sync.
 
 Run on the GPU VM::
 
@@ -33,6 +33,8 @@ from typing import Optional
 _backend = None
 _backend_name: str = ""
 _device: str = "auto"
+_aligner_name: str = "whisperx"
+_lipsync_provider_name: str = "auto"
 
 
 def _create_app():
@@ -56,6 +58,8 @@ def _create_app():
             "output_format": _backend.output_format if _backend else None,
             "max_chunk_bytes": _backend.max_chunk_bytes if _backend else None,
             "device": _device,
+            "aligner": _aligner_name,
+            "lipsync_provider": _lipsync_provider_name,
             "capabilities": ["synthesize", "align", "lipsync"],
         }
 
@@ -93,7 +97,7 @@ def _create_app():
         return Response(content=audio_bytes, media_type=media_type)
 
     # ------------------------------------------------------------------
-    # WhisperX alignment
+    # Alignment
     # ------------------------------------------------------------------
 
     @app.post("/align")
@@ -101,6 +105,7 @@ def _create_app():
         audio: UploadFile = File(...),
         text: str = Form(...),
         language: str = Form("en-US"),
+        provider: Optional[str] = Form(None),
     ):
         """Align text to audio and return word-level timestamps."""
         from .aligner import align_chunk
@@ -116,7 +121,11 @@ def _create_app():
                 f.write(content)
 
             words = align_chunk(
-                tmp_audio, text, language=language, device=_device,
+                tmp_audio,
+                text,
+                provider=provider or _aligner_name,
+                language=language,
+                device=_device,
             )
 
             return {
@@ -137,6 +146,7 @@ def _create_app():
     async def lipsync(
         audio: UploadFile = File(...),
         reference_video: UploadFile = File(...),
+        provider: Optional[str] = Form(None),
     ):
         """Generate lip-synced video from audio and reference face video."""
         from .lipsync import generate_lipsync_video
@@ -165,6 +175,7 @@ def _create_app():
                 audio_path=tmp_audio,
                 reference_video_path=tmp_video,
                 output_path=tmp_output,
+                provider=provider or _lipsync_provider_name,
                 device=_device,
             )
 
@@ -188,63 +199,83 @@ app = _create_app()
 # ---------------------------------------------------------------------------
 
 def _build_server_parser() -> argparse.ArgumentParser:
+    from .backends import (
+        get_backend_names,
+        get_default_backend_name,
+        register_backend_args,
+    )
+    from .aligner import (
+        get_alignment_provider_names,
+        get_default_alignment_provider,
+    )
+    from .lipsync import (
+        get_lipsync_provider_names,
+        get_default_lipsync_provider,
+    )
+
     p = argparse.ArgumentParser(
         prog="screencastgen-server",
         description="GPU inference server — TTS, alignment, and lip-sync.",
     )
     p.add_argument(
-        "--backend", default="qwen",
-        choices=["qwen", "f5"],
-        help="TTS backend to load (default: qwen)",
+        "--backend",
+        default=get_default_backend_name(context="server"),
+        choices=get_backend_names(context="server"),
+        help="TTS backend to load",
     )
     p.add_argument("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     p.add_argument("--port", type=int, default=8100, help="Port (default: 8100)")
     p.add_argument("--device", default="auto", help="Device: auto, cpu, cuda (default: auto)")
-    p.add_argument("--model", default=None, help="Model name/path (e.g. 0.6B, 1.7B for qwen)")
     p.add_argument("--language", default="en-US", help="Default language code (default: en-US)")
     # Voice cloning reference (stays loaded for all requests)
     p.add_argument("--ref-audio", default=None, help="Reference audio for voice cloning")
     p.add_argument("--ref-text", default=None, help="Transcript of reference audio")
+    p.add_argument(
+        "--aligner",
+        default=get_default_alignment_provider(),
+        choices=get_alignment_provider_names(),
+        help="Alignment provider to use for /align requests",
+    )
+    p.add_argument(
+        "--lipsync-provider",
+        default=get_default_lipsync_provider(),
+        choices=get_lipsync_provider_names(),
+        help="Lip-sync provider to use for /lipsync requests",
+    )
+    register_backend_args(p, context="server")
     return p
 
 
 def main(argv=None):
-    global _backend, _backend_name, _device
+    global _backend, _backend_name, _device, _aligner_name, _lipsync_provider_name
 
     parser = _build_server_parser()
     args = parser.parse_args(argv)
 
     # Resolve device
-    from .backends.qwen_tts import _resolve_device
-    _device = _resolve_device(args.device)
+    from .backends.base import resolve_device
+    _device = resolve_device(args.device)
 
     # Build the TTS backend eagerly so the model is loaded before serving
-    from .backends import create_backend
+    from .backends import create_backend_from_args
 
     _backend_name = args.backend
-    kwargs = {"device": args.device}
-
-    if args.backend == "qwen":
-        kwargs["model_name"] = args.model
-        kwargs["ref_audio_path"] = args.ref_audio
-        kwargs["ref_text"] = args.ref_text
-        kwargs["language"] = args.language
-    elif args.backend == "f5":
-        if not args.ref_audio:
-            print("Error: --ref-audio is required for the f5 backend", file=sys.stderr)
-            sys.exit(1)
-        kwargs["ref_audio_path"] = args.ref_audio
-        kwargs["ref_text"] = args.ref_text
+    _aligner_name = args.aligner
+    _lipsync_provider_name = args.lipsync_provider
 
     print(f"Loading {args.backend} TTS backend on {_device}...")
-    _backend = create_backend(args.backend, **kwargs)
+    try:
+        _backend = create_backend_from_args(args, invocation="server")
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
 
     # Force model load now (not on first request)
     if hasattr(_backend, "_ensure_model"):
         _backend._ensure_model()
 
     print(f"Backend ready. Serving on {args.host}:{args.port}")
-    print(f"Capabilities: TTS synthesis, WhisperX alignment, lip-sync generation")
+    print(f"Capabilities: TTS synthesis, alignment, lip-sync generation")
 
     import uvicorn
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")

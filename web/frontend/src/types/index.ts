@@ -40,9 +40,10 @@ export interface ProgressEvent {
 }
 
 export interface AudioConfig {
-  voice: string;
   language: string;
-  encoding: string;
+  backend?: string;
+  tts_server_url?: string;
+  aligner?: string;
 }
 
 export interface HighlightConfig extends AudioConfig {
@@ -56,7 +57,11 @@ export interface LipsyncConfig {
   ref_audio_file_id: string;
   ref_video_file_id: string;
   ref_text?: string;
+  backend?: string;
+  aligner?: string;
+  lipsync_provider?: string;
   device: string;
+  tts_server_url?: string;
   face_position: string;
   font_size: number;
   width: number;

@@ -21,6 +21,8 @@ class AudioConfig(BaseModel):
     backend: str = "remote"
     language: str = DEFAULT_LANGUAGE
     tts_server_url: Optional[str] = None
+    aligner: str = "whisperx"
+    model_config = {"extra": "forbid"}
 
 
 class HighlightConfig(AudioConfig):
@@ -35,12 +37,15 @@ class LipsyncConfig(BaseModel):
     ref_video_file_id: UUID
     ref_text: Optional[str] = None
     backend: str = "remote"
+    aligner: str = "whisperx"
+    lipsync_provider: str = "auto"
     device: str = "auto"
     face_position: str = "left"
     font_size: int = DEFAULT_FONT_SIZE
     width: int = DEFAULT_VIDEO_WIDTH
     height: int = DEFAULT_VIDEO_HEIGHT
     fps: int = DEFAULT_VIDEO_FPS
+    model_config = {"extra": "forbid"}
 
 
 # --- Requests ---
@@ -51,6 +56,7 @@ class JobCreateRequest(BaseModel):
     audio_config: Optional[AudioConfig] = None
     highlight_config: Optional[HighlightConfig] = None
     lipsync_config: Optional[LipsyncConfig] = None
+    model_config = {"extra": "forbid"}
 
 
 # --- Responses ---

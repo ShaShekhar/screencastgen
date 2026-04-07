@@ -7,11 +7,10 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 
-from ..config import settings
 from ..database import async_session_factory
 from ..models import Job, JobStatus, PipelineType, UploadedFile
 from ..schemas import JobCreateRequest, JobListResponse, JobResponse
-from ..services.storage import delete_job_files
+from ..services.storage import delete_job_files, get_output_abs_path
 
 router = APIRouter(tags=["jobs"])
 
@@ -133,7 +132,10 @@ async def download_job(job_id: UUID):
         if job.status != JobStatus.completed or not job.output_path:
             raise HTTPException(400, "Job output not available")
 
-        abs_path = os.path.join(settings.OUTPUT_DIR, str(job_id), job.output_path)
+        try:
+            abs_path = get_output_abs_path(job_id, job.output_path)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         if not os.path.isfile(abs_path):
             raise HTTPException(404, "Output file not found on disk")
 

@@ -1,7 +1,7 @@
 """Client helpers for calling the GPU inference server remotely.
 
 Used by the CPU VM pipeline when ``--backend remote`` to offload
-WhisperX alignment and lip-sync generation to the GPU VM.
+alignment and lip-sync generation to the GPU VM.
 """
 
 import json
@@ -18,9 +18,10 @@ def remote_align_chunk(
     *,
     server_url: str = "http://localhost:8100",
     language: str = "en-US",
+    provider: str = "whisperx",
     timeout: int = 300,
 ) -> List[WordTiming]:
-    """Send audio + text to the GPU server for WhisperX alignment."""
+    """Send audio + text to the GPU server for alignment."""
     import urllib.request
 
     url = f"{server_url.rstrip('/')}/align"
@@ -53,6 +54,12 @@ def remote_align_chunk(
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="language"\r\n\r\n'
         f"{language}\r\n"
+    )
+
+    body_parts.append(
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="provider"\r\n\r\n'
+        f"{provider}\r\n"
     )
 
     body_parts.append(f"--{boundary}--\r\n")
@@ -90,6 +97,7 @@ def remote_generate_lipsync(
     output_path: str,
     *,
     server_url: str = "http://localhost:8100",
+    provider: str = "auto",
     timeout: int = 600,
 ) -> str:
     """Send audio + reference video to the GPU server for lip-sync generation."""
@@ -123,6 +131,12 @@ def remote_generate_lipsync(
     )
     body_parts.append(video_data)
     body_parts.append(b"\r\n")
+
+    body_parts.append(
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="provider"\r\n\r\n'
+        f"{provider}\r\n"
+    )
 
     body_parts.append(f"--{boundary}--\r\n")
 
