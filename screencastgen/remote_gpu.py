@@ -98,6 +98,7 @@ def remote_generate_lipsync(
     *,
     server_url: str = "http://localhost:8100",
     provider: str = "auto",
+    latentsync_preset: str = "quality",
     timeout: int = 600,
 ) -> str:
     """Send audio + reference video to the GPU server for lip-sync generation."""
@@ -136,6 +137,11 @@ def remote_generate_lipsync(
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="provider"\r\n\r\n'
         f"{provider}\r\n"
+    )
+    body_parts.append(
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="latentsync_preset"\r\n\r\n'
+        f"{latentsync_preset}\r\n"
     )
 
     body_parts.append(f"--{boundary}--\r\n")

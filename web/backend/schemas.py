@@ -40,7 +40,9 @@ class LipsyncConfig(BaseModel):
     aligner: str = "whisperx"
     lipsync_provider: str = "auto"
     device: str = "auto"
-    face_position: str = "left"
+    face_position: str = "bottom-right"
+    face_scale: float = 0.22
+    latentsync_preset: str = "quality"
     font_size: int = DEFAULT_FONT_SIZE
     width: int = DEFAULT_VIDEO_WIDTH
     height: int = DEFAULT_VIDEO_HEIGHT

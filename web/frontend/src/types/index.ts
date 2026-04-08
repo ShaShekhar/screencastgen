@@ -63,6 +63,8 @@ export interface LipsyncConfig {
   device: string;
   tts_server_url?: string;
   face_position: string;
+  face_scale: number;
+  latentsync_preset: string;
   font_size: number;
   width: number;
   height: number;

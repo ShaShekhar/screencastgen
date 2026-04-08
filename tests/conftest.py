@@ -303,7 +303,9 @@ def make_lipsync_args(pdf_path, output_dir, ref_audio, ref_video, **overrides):
         font_size=32,
         resolution="1280x720",
         fps=24,
-        face_position="left",
+        face_position="bottom-right",
+        face_scale=0.22,
+        latentsync_preset="quality",
     )
     defaults.update(overrides)
     return argparse.Namespace(**defaults)

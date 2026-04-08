@@ -152,11 +152,15 @@ def run_lipsync_pipeline(
                         output_path=video_path,
                         server_url=gpu_url,
                         provider=lipsync_provider,
+                        latentsync_preset=request.latentsync_preset,
                     )
                 else:
                     from ..lipsync import generate_lipsync_video
 
-                    kwargs = {"device": request.device}
+                    kwargs = {
+                        "device": request.device,
+                        "latentsync_preset": request.latentsync_preset,
+                    }
                     if lipsync_provider != "auto":
                         kwargs["provider"] = lipsync_provider
                     generate_lipsync_video(
@@ -279,6 +283,7 @@ def build_lipsync_mp4(
         output_path=dest,
         fps=request.fps,
         face_position=request.face_position,
+        face_scale=request.face_scale,
     )
     reporter.line(f"\nDone: {dest}")
     return PipelineRunResult(exit_code=0, output_name=output_name, output_path=dest)

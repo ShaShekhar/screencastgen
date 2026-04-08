@@ -4,14 +4,16 @@ PyPDF2>=3.0
 # Audio and chunk concatenation
 pydub>=0.25
 
-# Local TTS backends
+# Local TTS backends and GPU runtime
 qwen-tts>=0.1
 f5-tts>=1.0
-torch>=2.0
+torch~=2.8.0
+torchaudio~=2.8.0
+torchcodec>=0.6,<0.8
 soundfile>=0.12
 
 # Alignment and highlight video
-whisperx>=3.1
+whisperx==3.8.5
 moviepy>=2.0
 Pillow>=10.0
 numpy>=1.24
@@ -22,6 +24,11 @@ uvicorn[standard]>=0.20
 python-multipart>=0.0.6
 
 # Notes:
+# - WhisperX currently works reliably here with torch 2.8.x + torchaudio 2.8.x
+#   + torchcodec 0.6/0.7. On NVIDIA GPUs, install from the matching PyTorch
+#   CUDA wheel index, for example:
+#   pip install --index-url https://download.pytorch.org/whl/cu128 -r requirements.txt
+# - ffmpeg must be installed on the system for WhisperX/torchcodec and media pipelines.
 # - LatentSync is not distributed as a normal PyPI dependency for this project flow.
 #   Install it from its repo when using the lip-sync pipeline:
 #   https://github.com/bytedance/LatentSync

@@ -45,6 +45,7 @@ screencastgen lipsync MyBook.pdf --backend f5 --ref-audio voice.wav --ref-video 
 # Pre-download model weights
 screencastgen download-models --backend qwen
 screencastgen download-models --backend qwen --model 1.7B
+# Requires LATENTSYNC_ROOT and LATENTSYNC_PYTHON, or the default install paths.
 screencastgen download-models --package whisperx --package latentsync
 screencastgen download-models --all
 ```
@@ -145,18 +146,27 @@ PDF to talking-head video with voice cloning and lip synchronization.
 ```bash
 pip install -e ".[lipsync]"
 
-# Install LatentSync (required for lip-sync generation)
-git clone https://github.com/bytedance/LatentSync.git
-cd LatentSync
-pip install -e .
-# Download the checkpoint per the LatentSync README:
-#   https://github.com/bytedance/LatentSync#download-checkpoints
-# -> LatentSync/checkpoints/latentsync_unet.pt
-cd ..
+# Install LatentSync into a separate uv-managed env.
+# This keeps LatentSync's pinned torch stack isolated from WhisperX.
+scripts/install_latentsync.sh
+
+# Optional if you use custom paths instead of the defaults above:
+export LATENTSYNC_ROOT=/path/to/LatentSync
+export LATENTSYNC_PYTHON=/path/to/.venvs/latentsync/bin/python
+
+# Re-download checkpoints later if needed:
+python -m screencastgen download-models --package latentsync
 
 screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4
 screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4 --lipsync-provider wav2lip
 ```
+
+The default install locations used by `scripts/install_latentsync.sh` are:
+
+- `external/LatentSync` for the upstream repo clone
+- `.venvs/latentsync` for the dedicated Python 3.10 environment
+
+The local LatentSync provider runs as a persistent sidecar subprocess through `LATENTSYNC_PYTHON`, so it does not import LatentSync into the main screencastgen environment.
 
 ## Provider Model
 
@@ -305,7 +315,7 @@ pyproject.toml            Package metadata and entry points
 | Qwen3 TTS      | qwen-tts, torch, soundfile                      |
 | Concatenation   | pydub (preferred) or ffmpeg CLI                 |
 | Highlight video | alignment provider deps (currently whisperx), moviepy, Pillow, torch |
-| Lip-sync video  | f5-tts, lip-sync provider deps (currently [LatentSync](https://github.com/bytedance/LatentSync) or Wav2Lip), ffmpeg/ffprobe |
+| Lip-sync video  | f5-tts, lip-sync provider deps (currently [LatentSync](https://github.com/bytedance/LatentSync) in a separate env, or Wav2Lip), ffmpeg/ffprobe |
 | GPU server      | fastapi, uvicorn, python-multipart              |
 | Web app         | fastapi, sqlalchemy, celery, redis, asyncpg     |
 | Web frontend    | react, react-router-dom, axios, tailwindcss     |

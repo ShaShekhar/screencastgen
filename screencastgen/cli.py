@@ -141,9 +141,29 @@ def _build_parser() -> argparse.ArgumentParser:
     ls_p.add_argument("--format", default="epub", choices=["epub", "mp4"], help="Output format (default: epub)")
     ls_p.add_argument(
         "--face-position",
-        default="left",
-        choices=["left", "right", "center"],
-        help="Position of the face in the video (default: left)",
+        default="bottom-right",
+        choices=[
+            "left",
+            "right",
+            "center",
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right",
+        ],
+        help="Position of the face in the video (default: bottom-right)",
+    )
+    ls_p.add_argument(
+        "--face-scale",
+        type=float,
+        default=0.22,
+        help="Relative face width for corner-overlay layouts (default: 0.22)",
+    )
+    ls_p.add_argument(
+        "--latentsync-preset",
+        default="quality",
+        choices=["small", "quality"],
+        help="LatentSync preset: small (256) or quality (512) (default: quality)",
     )
 
     from .models import register_model_download_args

@@ -13,7 +13,6 @@ from .providers.lipsync import (
     get_lipsync_provider_names,
     run_lipsync_provider,
 )
-from .providers.lipsync.latentsync_provider import find_latentsync_root as _find_latentsync_root
 
 
 def _resolve_device(device: str = "auto") -> str:
@@ -47,6 +46,7 @@ def generate_lipsync_video(
     output_path: str,
     provider: str = DEFAULT_LIPSYNC_PROVIDER,
     device: str = "auto",
+    latentsync_preset: str = "quality",
 ) -> str:
     """Generate a lip-synced video from audio and a reference face video."""
     if provider not in get_lipsync_provider_names():
@@ -68,7 +68,14 @@ def generate_lipsync_video(
 
     try:
         _loop_video_to_duration(reference_video_path, audio_duration, looped_video)
-        _run_provider(provider, looped_video, audio_path, output_path, device)
+        _run_provider(
+            provider,
+            looped_video,
+            audio_path,
+            output_path,
+            device,
+            latentsync_preset=latentsync_preset,
+        )
     finally:
         if os.path.exists(looped_video):
             os.unlink(looped_video)
@@ -82,11 +89,19 @@ def _run_provider(
     audio_path: str,
     output_path: str,
     device: str,
+    *,
+    latentsync_preset: str,
 ):
     """Run the selected lip-sync provider."""
     if provider == DEFAULT_LIPSYNC_PROVIDER:
         try:
-            _run_latentsync(video_path, audio_path, output_path, device)
+            _run_latentsync(
+                video_path,
+                audio_path,
+                output_path,
+                device,
+                preset=latentsync_preset,
+            )
             return
         except ImportError:
             try:
@@ -95,13 +110,18 @@ def _run_provider(
             except ImportError as exc:
                 raise ImportError(
                     "No lip-sync backend found. Install LatentSync:\n"
-                    "  git clone https://github.com/bytedance/LatentSync.git\n"
-                    "  cd LatentSync && pip install -e .\n"
-                    "Then download the checkpoint per the LatentSync README."
+                    "  scripts/install_latentsync.sh\n"
+                    "Or set LATENTSYNC_ROOT and LATENTSYNC_PYTHON for an existing install."
                 ) from exc
 
     if provider == "latentsync":
-        _run_latentsync(video_path, audio_path, output_path, device)
+        _run_latentsync(
+            video_path,
+            audio_path,
+            output_path,
+            device,
+            preset=latentsync_preset,
+        )
         return
 
     if provider == "wav2lip":
@@ -114,9 +134,23 @@ def _run_provider(
     )
 
 
-def _run_latentsync(video_path: str, audio_path: str, output_path: str, device: str):
+def _run_latentsync(
+    video_path: str,
+    audio_path: str,
+    output_path: str,
+    device: str,
+    *,
+    preset: str = "quality",
+):
     """Compatibility wrapper for the LatentSync provider."""
-    return run_lipsync_provider("latentsync", video_path, audio_path, output_path, device=device)
+    return run_lipsync_provider(
+        "latentsync",
+        video_path,
+        audio_path,
+        output_path,
+        device=device,
+        preset=preset,
+    )
 
 
 def _run_wav2lip(video_path: str, audio_path: str, output_path: str):

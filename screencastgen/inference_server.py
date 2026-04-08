@@ -147,6 +147,7 @@ def _create_app():
         audio: UploadFile = File(...),
         reference_video: UploadFile = File(...),
         provider: Optional[str] = Form(None),
+        latentsync_preset: str = Form("quality"),
     ):
         """Generate lip-synced video from audio and reference face video."""
         from .lipsync import generate_lipsync_video
@@ -177,6 +178,7 @@ def _create_app():
                 output_path=tmp_output,
                 provider=provider or _lipsync_provider_name,
                 device=_device,
+                latentsync_preset=latentsync_preset,
             )
 
             with open(tmp_output, "rb") as f:

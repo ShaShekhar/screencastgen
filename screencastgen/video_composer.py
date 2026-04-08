@@ -75,7 +75,8 @@ def compose_lipsync_video(
     renderer,
     output_path: str,
     fps: int = 24,
-    face_position: str = "left",
+    face_position: str = "bottom-right",
+    face_scale: float = 0.22,
 ) -> str:
     """Create a composite video with lip-synced face + highlighted text.
 
@@ -83,6 +84,7 @@ def compose_lipsync_video(
     - left: face on left half, text on right half
     - right: text on left half, face on right half
     - center: face centered top, text below
+    - top-left/top-right/bottom-left/bottom-right: presenter overlay in corner
     """
     from moviepy import (
         AudioFileClip,
@@ -94,21 +96,23 @@ def compose_lipsync_video(
 
     frame_w, frame_h = renderer.width, renderer.height
     clips = []
+    overlay_positions = {"top-left", "top-right", "bottom-left", "bottom-right"}
+    overlay_margin = max(16, int(min(frame_w, frame_h) * 0.03))
+    overlay_scale = min(max(face_scale, 0.1), 0.9)
 
     for ac, lipsync_path in zip(aligned_chunks, lipsync_clips):
         duration = _get_audio_duration(ac.audio_path)
         word_texts = [w.word for w in ac.words]
 
-        # Text area is half the frame for left/right layouts
-        if face_position in ("left", "right"):
+        if face_position in overlay_positions:
+            text_w = frame_w
+            text_renderer_width = text_w
+        elif face_position in ("left", "right"):
+            # Text area is half the frame for left/right layouts
             text_w = frame_w // 2
-            face_w = frame_w // 2
-            face_h = frame_h
             text_renderer_width = text_w
         else:  # center
             text_w = frame_w
-            face_w = frame_w // 2
-            face_h = frame_h // 2
             text_renderer_width = text_w
 
         # Adjust renderer width for text area
@@ -129,11 +133,26 @@ def compose_lipsync_video(
         text_clip = VideoClip(make_text_frame, duration=duration).with_fps(fps)
 
         # Load lip-sync face video
-        face_clip = VideoFileClip(lipsync_path).resized((face_w, face_h))
+        face_clip = VideoFileClip(lipsync_path)
         if face_clip.duration < duration:
             face_clip = face_clip.loop(duration=duration)
         else:
             face_clip = face_clip.subclipped(0, duration)
+
+        src_face_w, src_face_h = face_clip.size
+        if face_position in overlay_positions:
+            face_w = max(1, int(frame_w * overlay_scale))
+            face_h = max(1, int(src_face_h * face_w / max(src_face_w, 1)))
+            if face_h > frame_h - (overlay_margin * 2):
+                face_h = max(1, frame_h - (overlay_margin * 2))
+                face_w = max(1, int(src_face_w * face_h / max(src_face_h, 1)))
+        elif face_position in ("left", "right"):
+            face_w = frame_w // 2
+            face_h = frame_h
+        else:
+            face_w = frame_w // 2
+            face_h = frame_h // 2
+        face_clip = face_clip.resized((face_w, face_h))
 
         # Position clips
         if face_position == "left":
@@ -142,9 +161,14 @@ def compose_lipsync_video(
         elif face_position == "right":
             text_clip = text_clip.with_position((0, 0))
             face_clip = face_clip.with_position((text_w, 0))
-        else:  # center
+        elif face_position == "center":
             face_clip = face_clip.with_position(((frame_w - face_w) // 2, 0))
             text_clip = text_clip.with_position((0, face_h))
+        else:
+            x = overlay_margin if face_position.endswith("left") else frame_w - face_w - overlay_margin
+            y = overlay_margin if face_position.startswith("top") else frame_h - face_h - overlay_margin
+            text_clip = text_clip.with_position((0, 0))
+            face_clip = face_clip.with_position((x, y))
 
         composite = CompositeVideoClip(
             [face_clip, text_clip],

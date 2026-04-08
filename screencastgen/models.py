@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
+from .providers.lipsync.latentsync_provider import download_latentsync_checkpoints
 from .providers.tts import (
     get_backend_spec,
     get_downloadable_backend_names,
@@ -47,19 +48,74 @@ def _download_whisperx(args) -> None:
 def _download_latentsync(args) -> None:
     print("\n--- Downloading LatentSync models ---")
     try:
-        import latentsync  # noqa: F401
-
-        print("LatentSync package found. Models will be downloaded on first use.")
+        download_latentsync_checkpoints(
+            root=getattr(args, "latentsync_root", None),
+            python_executable=getattr(args, "latentsync_python", None),
+            hf_repo=getattr(args, "latentsync_hf_repo", "ByteDance/LatentSync-1.6"),
+            checkpoint_file=getattr(args, "latentsync_checkpoint_file", "latentsync_unet.pt"),
+            audio_checkpoint=getattr(args, "latentsync_audio_checkpoint", "whisper/tiny.pt"),
+        )
+        print("LatentSync checkpoints downloaded.")
     except ImportError:
         print(
-            "ERROR: latentsync not installed.\n"
-            "See: https://github.com/bytedance/LatentSync for installation instructions."
+            "ERROR: LatentSync runtime not configured.\n"
+            "Set LATENTSYNC_ROOT and LATENTSYNC_PYTHON, or run scripts/install_latentsync.sh."
         )
+    except Exception as exc:
+        print(f"ERROR downloading LatentSync models: {exc}")
+
+
+_LATENTSYNC_DOWNLOAD_ARGS = (
+    BackendArg(
+        flags=("--latentsync-root",),
+        kwargs={
+            "default": None,
+            "help": "Path to the LatentSync repo clone (defaults: ./external/LatentSync, ./LatentSync)",
+        },
+        contexts=frozenset({"download"}),
+    ),
+    BackendArg(
+        flags=("--latentsync-python",),
+        kwargs={
+            "default": None,
+            "help": "Python executable for the dedicated LatentSync env",
+        },
+        contexts=frozenset({"download"}),
+    ),
+    BackendArg(
+        flags=("--latentsync-hf-repo",),
+        kwargs={
+            "default": "ByteDance/LatentSync-1.6",
+            "help": "Hugging Face repo used for LatentSync checkpoints (default: ByteDance/LatentSync-1.6)",
+        },
+        contexts=frozenset({"download"}),
+    ),
+    BackendArg(
+        flags=("--latentsync-checkpoint-file",),
+        kwargs={
+            "default": "latentsync_unet.pt",
+            "help": "Checkpoint filename inside the Hugging Face repo (default: latentsync_unet.pt)",
+        },
+        contexts=frozenset({"download"}),
+    ),
+    BackendArg(
+        flags=("--latentsync-audio-checkpoint",),
+        kwargs={
+            "default": "whisper/tiny.pt",
+            "help": "Audio encoder checkpoint filename inside the Hugging Face repo (default: whisper/tiny.pt)",
+        },
+        contexts=frozenset({"download"}),
+    ),
+)
 
 
 _PACKAGE_SPECS = {
     "whisperx": ModelPackageSpec(name="whisperx", download_models=_download_whisperx),
-    "latentsync": ModelPackageSpec(name="latentsync", download_models=_download_latentsync),
+    "latentsync": ModelPackageSpec(
+        name="latentsync",
+        download_models=_download_latentsync,
+        download_args=_LATENTSYNC_DOWNLOAD_ARGS,
+    ),
 }
 
 

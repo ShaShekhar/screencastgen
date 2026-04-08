@@ -7,7 +7,15 @@ interface Props {
   onChange: (c: LipsyncConfig) => void;
 }
 
-const FACE_POSITIONS = ["left", "right", "center"];
+const FACE_POSITIONS = [
+  { value: "bottom-right", label: "Bottom Right" },
+  { value: "top-right", label: "Top Right" },
+  { value: "bottom-left", label: "Bottom Left" },
+  { value: "top-left", label: "Top Left" },
+  { value: "left", label: "Split Left" },
+  { value: "right", label: "Split Right" },
+  { value: "center", label: "Top Center" },
+];
 const ALIGNERS = [
   { value: "whisperx", label: "WhisperX" },
 ];
@@ -15,6 +23,10 @@ const LIPSYNC_PROVIDERS = [
   { value: "auto", label: "Auto" },
   { value: "latentsync", label: "LatentSync" },
   { value: "wav2lip", label: "Wav2Lip" },
+];
+const LATENTSYNC_PRESETS = [
+  { value: "small", label: "Small Overlay (Recommended)" },
+  { value: "quality", label: "Higher Quality" },
 ];
 
 export default function LipsyncSettings({ config, onChange }: Props) {
@@ -78,20 +90,62 @@ export default function LipsyncSettings({ config, onChange }: Props) {
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Face Position
         </label>
-        <div className="flex gap-3">
+        <div className="grid grid-cols-2 gap-2">
           {FACE_POSITIONS.map((pos) => (
-            <label key={pos} className="flex items-center gap-1.5 text-sm capitalize">
+            <label key={pos.value} className="flex items-center gap-1.5 text-sm">
               <input
                 type="radio"
                 name="face_position"
-                value={pos}
-                checked={config.face_position === pos}
-                onChange={() => onChange({ ...config, face_position: pos })}
+                value={pos.value}
+                checked={config.face_position === pos.value}
+                onChange={() => onChange({ ...config, face_position: pos.value })}
               />
-              {pos}
+              {pos.label}
             </label>
           ))}
         </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          LatentSync Preset
+        </label>
+        <select
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          value={config.latentsync_preset}
+          onChange={(e) =>
+            onChange({ ...config, latentsync_preset: e.target.value })
+          }
+        >
+          {LATENTSYNC_PRESETS.map((preset) => (
+            <option key={preset.value} value={preset.value}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-gray-500">
+          Use `small` for Loom-style corner overlays. `quality` keeps the 512 pipeline.
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Overlay Scale
+        </label>
+        <input
+          type="range"
+          min={0.12}
+          max={0.4}
+          step={0.01}
+          value={config.face_scale}
+          onChange={(e) =>
+            onChange({ ...config, face_scale: Number(e.target.value) })
+          }
+          className="w-full"
+        />
+        <p className="mt-1 text-xs text-gray-500">
+          {Math.round(config.face_scale * 100)}% of frame width for corner overlays.
+        </p>
       </div>
 
       <div>

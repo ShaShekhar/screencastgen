@@ -47,11 +47,19 @@ def get_lipsync_provider_spec(name: str) -> LipsyncProviderSpec:
     )
 
 
-def run_lipsync_provider(provider: str, video_path: str, audio_path: str, output_path: str, *, device: str):
+def run_lipsync_provider(
+    provider: str,
+    video_path: str,
+    audio_path: str,
+    output_path: str,
+    *,
+    device: str,
+    **kwargs,
+):
     """Run the selected lip-sync provider."""
     spec = get_lipsync_provider_spec(provider)
     mod = _import_module(spec.module_path)
     fn = getattr(mod, spec.function_name)
     if provider == "latentsync":
-        return fn(video_path, audio_path, output_path, device)
+        return fn(video_path, audio_path, output_path, device, **kwargs)
     return fn(video_path, audio_path, output_path)

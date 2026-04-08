@@ -66,7 +66,9 @@ class LipsyncPipelineRequest(HighlightPipelineRequest):
 
     ref_video: str = ""
     lipsync_provider: str = "auto"
-    face_position: str = "left"
+    face_position: str = "bottom-right"
+    face_scale: float = 0.22
+    latentsync_preset: str = "quality"
 
 
 @dataclass

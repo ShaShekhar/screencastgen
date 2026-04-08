@@ -219,6 +219,7 @@ class TestComposeLipsyncVideoMocked:
 
         mock_face_clip = MagicMock()
         mock_face_clip.duration = 2.0
+        mock_face_clip.size = (640, 640)
         mock_face_clip.resized.return_value = mock_face_clip
         mock_face_clip.subclipped.return_value = mock_face_clip
         mock_face_clip.loop.return_value = mock_face_clip
@@ -296,6 +297,39 @@ class TestComposeLipsyncVideoMocked:
             )
 
         assert result == output_path
+
+    def test_corner_overlay_layout_uses_scale(self, sample_aligned_chunks, tmp_path):
+        """Corner overlays should use the requested scale instead of split layout."""
+        renderer = HighlightRenderer(width=1280, height=720, font_size=24)
+        output_path = str(tmp_path / "lipsync_corner.mp4")
+
+        lipsync_clips = []
+        for i in range(3):
+            clip_path = str(tmp_path / f"corner_face_{i}.mp4")
+            with open(clip_path, "wb") as f:
+                f.write(b"\x00" * 100)
+            lipsync_clips.append(clip_path)
+
+        mock_moviepy, _ = self._mock_moviepy()
+        mock_face_clip = mock_moviepy.VideoFileClip.return_value
+
+        with patch.dict("sys.modules", {"moviepy": mock_moviepy}), \
+             patch("screencastgen.video_composer._get_audio_duration", return_value=1.5):
+
+            import importlib
+            import screencastgen.video_composer as vc
+            importlib.reload(vc)
+            vc.compose_lipsync_video(
+                sample_aligned_chunks,
+                lipsync_clips,
+                renderer,
+                output_path,
+                fps=24,
+                face_position="bottom-right",
+                face_scale=0.2,
+            )
+
+        mock_face_clip.resized.assert_called_with((256, 256))
 
     def test_empty_chunks_raises(self, tmp_path):
         """compose_lipsync_video should raise with empty input."""
@@ -392,7 +426,7 @@ class TestLipsyncPipelineIntegration:
         mock_words = [WordTiming("test", 0.0, 0.5)]
 
         # Mock lipsync generation
-        def fake_lipsync(audio_path, reference_video_path, output_path, device="cpu"):
+        def fake_lipsync(audio_path, reference_video_path, output_path, device="cpu", **kwargs):
             with open(output_path, "wb") as f:
                 f.write(b"\x00" * 100)
             return output_path
@@ -407,6 +441,7 @@ class TestLipsyncPipelineIntegration:
 
         mock_face_clip = MagicMock()
         mock_face_clip.duration = 2.0
+        mock_face_clip.size = (640, 640)
         mock_face_clip.resized.return_value = mock_face_clip
         mock_face_clip.subclipped.return_value = mock_face_clip
         mock_face_clip.loop.return_value = mock_face_clip
@@ -515,6 +550,7 @@ class TestLipsyncRemoteGPU:
 
         mock_face_clip = MagicMock()
         mock_face_clip.duration = 2.0
+        mock_face_clip.size = (640, 640)
         mock_face_clip.resized.return_value = mock_face_clip
         mock_face_clip.subclipped.return_value = mock_face_clip
         mock_face_clip.loop.return_value = mock_face_clip
