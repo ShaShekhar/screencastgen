@@ -22,6 +22,51 @@ Options:
 EOF
 }
 
+require_command() {
+  local cmd="$1"
+  local install_hint="$2"
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    echo "${cmd} is required but was not found in PATH." >&2
+    if [[ -n "${install_hint}" ]]; then
+      echo "${install_hint}" >&2
+    fi
+    exit 1
+  fi
+}
+
+check_system_deps() {
+  local missing=0
+
+  if ! command -v gcc >/dev/null 2>&1; then
+    echo "Missing required build tool: gcc" >&2
+    missing=1
+  fi
+  if ! command -v g++ >/dev/null 2>&1; then
+    echo "Missing required build tool: g++" >&2
+    missing=1
+  fi
+  if ! command -v make >/dev/null 2>&1; then
+    echo "Missing required build tool: make" >&2
+    missing=1
+  fi
+
+  if [[ "${missing}" -ne 0 ]]; then
+    cat >&2 <<EOF
+
+Install the required system packages first, then rerun this script.
+For Ubuntu/Debian:
+  sudo apt-get update
+  sudo apt-get install -y build-essential python3.10-dev ffmpeg libgl1 libglib2.0-0
+EOF
+    exit 1
+  fi
+
+  if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "ffmpeg was not found in PATH. Install it before running lip-sync jobs." >&2
+    echo "For Ubuntu/Debian: sudo apt-get install -y ffmpeg" >&2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root)
@@ -56,15 +101,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if ! command -v uv >/dev/null 2>&1; then
-  echo "uv is required but was not found in PATH." >&2
-  exit 1
-fi
-
-if ! command -v git >/dev/null 2>&1; then
-  echo "git is required but was not found in PATH." >&2
-  exit 1
-fi
+require_command "uv" "Install uv first: https://docs.astral.sh/uv/getting-started/installation/"
+require_command "git" "Install git first, then rerun this script."
+check_system_deps
 
 if [[ ! -d "${LATENTSYNC_ROOT}" ]]; then
   mkdir -p "$(dirname "${LATENTSYNC_ROOT}")"
@@ -85,10 +124,6 @@ uv pip install --python "${LATENTSYNC_PYTHON}" -r "${LATENTSYNC_ROOT}/requiremen
   --local-dir "${LATENTSYNC_ROOT}/checkpoints" \
   --checkpoint-file "${CHECKPOINT_FILE}" \
   --audio-checkpoint "${AUDIO_CHECKPOINT}"
-
-if ! command -v ffmpeg >/dev/null 2>&1; then
-  echo "ffmpeg was not found in PATH. Install it before running lip-sync jobs." >&2
-fi
 
 cat <<EOF
 
