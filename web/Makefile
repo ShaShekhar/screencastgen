@@ -3,8 +3,8 @@
 # --- Local development (requires PostgreSQL + Redis running locally) ---
 
 install:
-	pip install -e "../.[pydub]"
-	pip install -r backend/requirements.txt
+	uv pip install -e "../.[pydub]"
+	uv pip install -r backend/requirements.txt
 	cd frontend && npm install
 
 backend:
