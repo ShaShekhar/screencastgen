@@ -1,2 +1,28 @@
+# Core package
 PyPDF2>=3.0
+
+# Audio and chunk concatenation
 pydub>=0.25
+
+# Local TTS backends
+qwen-tts>=0.1
+f5-tts>=1.0
+torch>=2.0
+soundfile>=0.12
+
+# Alignment and highlight video
+whisperx>=3.1
+moviepy>=2.0
+Pillow>=10.0
+numpy>=1.24
+
+# GPU inference server
+fastapi>=0.100
+uvicorn[standard]>=0.20
+python-multipart>=0.0.6
+
+# Notes:
+# - LatentSync is not distributed as a normal PyPI dependency for this project flow.
+#   Install it from its repo when using the lip-sync pipeline:
+#   https://github.com/bytedance/LatentSync
+# - Wav2Lip is optional and only needed when using --lipsync-provider wav2lip.
