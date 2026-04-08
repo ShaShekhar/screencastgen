@@ -17,7 +17,7 @@ frontend:
 	cd frontend && npm run dev
 
 migrate:
-	cd backend && alembic upgrade head
+	cd backend && PYTHONPATH=$(CURDIR)/.. alembic upgrade head
 
 dev:
 	@echo "Run these in separate terminals:"
