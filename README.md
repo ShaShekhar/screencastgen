@@ -250,39 +250,51 @@ See [CLAUDE.md](CLAUDE.md) for local dev setup and architecture details.
 
 ```
 screencastgen/
-  __init__.py           Package version
-  __main__.py           python -m entry point
-  cli.py                Argparse CLI and pipeline runners
-  extractor.py          PDF text extraction
-  text_processing.py    Preprocess, split, chunk, validate
-  tts_clone.py          F5-TTS voice cloning backend
-  tracker.py            Resumable processing state (JSON)
-  concatenator.py       Audio merge (pydub / ffmpeg fallback)
-  constants.py          All defaults and limits
-  types.py              TTSBackend protocol, WordTiming, AlignedChunk
-  aligner.py            Alignment provider dispatch
-  lipsync.py            Lip-sync provider dispatch
-  inference_server.py   FastAPI GPU inference server
-  remote_gpu.py         HTTP client for remote alignment and lip-sync
-  models.py             Model download and cache management
+  __init__.py             Package version
+  __main__.py             python -m entry point
+  cli.py                  Argparse CLI, subcommand dispatch, compat wrappers
+  constants.py            All defaults and byte limits
+  types.py                TTSBackend protocol, WordTiming, AlignedChunk
+  pipelines/
+    __init__.py           Public re-exports for all pipeline entry points
+    types.py              Request dataclasses (Audio/Highlight/Lipsync) + PipelineRunResult
+    events.py             PipelineReporter — structured progress + console logging
+    common.py             Shared steps: extract, chunk, validate, synthesize, align
+    audio.py              Audio pipeline runner
+    highlight.py          Highlight video/EPUB pipeline runner
+    lipsync.py            Lip-sync video/EPUB pipeline runner
   providers/
     tts/
-      __init__.py       TTS registry, spec loading, and factory
-      base.py           Shared TTS backend metadata and helpers
-      qwen_backend.py   Qwen3-TTS backend + spec
-      f5_tts.py         F5-TTS backend shim + spec
-      remote_tts.py     Remote TTS backend + spec (HTTP client)
+      __init__.py         TTS registry, spec loading, and factory
+      base.py             BackendSpec/BackendArg dataclasses, resolve_device()
+      qwen_backend.py     Qwen3-TTS backend + spec
+      f5_tts.py           F5-TTS backend shim + spec
+      remote_tts.py       Remote TTS backend + spec (HTTP client)
     align/
-      __init__.py       Alignment provider registry
-      whisperx_provider.py  WhisperX alignment provider
+      __init__.py         Alignment provider registry
+      base.py             AlignmentProviderSpec dataclass
+      whisperx_provider.py  WhisperX alignment implementation
     lipsync/
-      __init__.py       Lip-sync provider registry
-      latentsync_provider.py LatentSync provider
-      wav2lip_provider.py    Wav2Lip provider
-  highlight_renderer.py Text highlight frame renderer
-  video_composer.py     Video composition (highlight + lipsync)
-web/                    Full-stack web application
-pyproject.toml          Package metadata and entry points
+      __init__.py         Lip-sync provider registry
+      base.py             LipsyncProviderSpec dataclass
+      latentsync_provider.py  LatentSync implementation
+      wav2lip_provider.py     Wav2Lip implementation
+  extractor.py            PDF text extraction (PyPDF2)
+  text_processing.py      Preprocess, sentence split, chunking (byte-based)
+  tracker.py              ProcessingTracker — resumable state (JSON)
+  concatenator.py         Audio/video merge (pydub / ffmpeg fallback)
+  aligner.py              Thin facade over providers/align
+  lipsync.py              Thin facade over providers/lipsync
+  highlight_renderer.py   Word-highlighted video frame renderer (moviepy/Pillow)
+  video_composer.py       Video composition (highlight + lipsync)
+  epub_builder.py         EPUB3 output with embedded audio/video + SMIL overlays
+  inference_server.py     FastAPI GPU inference server
+  remote_gpu.py           HTTP client helpers for remote TTS, alignment, lip-sync
+  models.py               Model download and cache management
+  tts_clone.py            Voice cloning helpers
+tests/                    Test stubs
+web/                      Full-stack web application
+pyproject.toml            Package metadata and entry points
 ```
 
 ## Dependencies by Feature
