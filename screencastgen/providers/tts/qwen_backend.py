@@ -17,7 +17,6 @@ _MODEL_ALIASES = {
 
 DEFAULT_QWEN_MODEL = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
 
-# Language code mapping (BCP-47 -> Qwen language name)
 _LANG_MAP = {
     "en": "English",
     "en-us": "English",
@@ -46,9 +45,7 @@ class QwenTTS:
         language: str = "en-US",
         device: str = "auto",
     ):
-        self._model_name = _MODEL_ALIASES.get(
-            model_name, model_name
-        ) if model_name else DEFAULT_QWEN_MODEL
+        self._model_name = _MODEL_ALIASES.get(model_name, model_name) if model_name else DEFAULT_QWEN_MODEL
         self.ref_audio_path = ref_audio_path
         self.ref_text = ref_text
         self._language = _LANG_MAP.get(language.lower(), "English")
@@ -116,10 +113,7 @@ def _validate(args, invocation: str) -> None:
 
 
 def _download_models(args) -> None:
-    model_name = _MODEL_ALIASES.get(
-        getattr(args, "model", None),
-        getattr(args, "model", None),
-    ) or DEFAULT_QWEN_MODEL
+    model_name = _MODEL_ALIASES.get(getattr(args, "model", None), getattr(args, "model", None)) or DEFAULT_QWEN_MODEL
 
     print(f"\n--- Downloading Qwen3-TTS model: {model_name} ---")
     try:

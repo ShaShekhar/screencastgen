@@ -209,7 +209,7 @@ class TestQwenTTS:
 
     @staticmethod
     def _synthesize_local(text: str, output_path: str, device: str):
-        from screencastgen.backends.qwen_backend import QwenTTS
+        from screencastgen.providers.tts.qwen_backend import QwenTTS
         backend = QwenTTS(device=device)
         backend.synthesize(text, output_path)
 

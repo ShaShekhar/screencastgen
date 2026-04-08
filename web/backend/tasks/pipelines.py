@@ -1,18 +1,12 @@
 """Celery tasks that execute screencastgen pipelines."""
 
-import argparse
-import json
+from __future__ import annotations
+
 import os
 import sys
 import uuid
 
-from .celery_app import celery_app
-from ..config import settings
-from ..database import get_sync_session
-from ..models import Job, JobStatus, UploadedFile
-from ..services.storage import get_output_abs_path, get_upload_abs_path, get_output_dir
-from .progress import ProgressBridge
-
+from screencastgen.aligner import get_default_alignment_provider
 from screencastgen.constants import (
     DEFAULT_FONT_SIZE,
     DEFAULT_LANGUAGE,
@@ -21,20 +15,34 @@ from screencastgen.constants import (
     DEFAULT_VIDEO_HEIGHT,
     DEFAULT_VIDEO_WIDTH,
 )
-from screencastgen.aligner import get_default_alignment_provider
 from screencastgen.lipsync import get_default_lipsync_provider
+from screencastgen.pipelines import PipelineReporter
+from screencastgen.pipelines.audio import run_audio_pipeline
+from screencastgen.pipelines.highlight import run_highlight_pipeline
+from screencastgen.pipelines.lipsync import run_lipsync_pipeline
+from screencastgen.pipelines.types import (
+    AudioPipelineRequest,
+    HighlightPipelineRequest,
+    LipsyncPipelineRequest,
+)
+
+from .celery_app import celery_app
+from .progress import JobProgressReporter
+from ..config import settings
+from ..database import get_sync_session
+from ..models import Job, JobStatus, UploadedFile
+from ..services.storage import get_upload_abs_path, get_output_dir
 
 
-def _build_audio_args(job: Job, pdf_path: str, output_dir: str) -> argparse.Namespace:
+def _build_audio_request(job: Job, pdf_path: str, output_dir: str) -> AudioPipelineRequest:
     cfg = job.config_json or {}
-    backend = cfg.get("backend", "remote")
     output_filename = os.path.splitext(os.path.basename(pdf_path))[0] + ".wav"
 
-    return argparse.Namespace(
+    return AudioPipelineRequest(
         pdf=pdf_path,
         output=output_filename,
         output_dir=output_dir,
-        backend=backend,
+        backend=cfg.get("backend", "remote"),
         voice=cfg.get("voice"),
         language=cfg.get("language", DEFAULT_LANGUAGE),
         model=cfg.get("model"),
@@ -47,17 +55,17 @@ def _build_audio_args(job: Job, pdf_path: str, output_dir: str) -> argparse.Name
         clean=False,
         verbose=True,
         no_concat=False,
-        command="audio",
     )
 
 
-def _build_highlight_args(job: Job, pdf_path: str, output_dir: str) -> argparse.Namespace:
+def _build_highlight_request(job: Job, pdf_path: str, output_dir: str) -> HighlightPipelineRequest:
     cfg = job.config_json or {}
     output_filename = os.path.splitext(os.path.basename(pdf_path))[0] + "_highlight.mp4"
 
-    return argparse.Namespace(
+    return HighlightPipelineRequest(
         pdf=pdf_path,
         output=output_filename,
+        format="mp4",
         output_dir=output_dir,
         backend=cfg.get("backend", "remote"),
         voice=cfg.get("voice"),
@@ -74,11 +82,15 @@ def _build_highlight_args(job: Job, pdf_path: str, output_dir: str) -> argparse.
         font_size=cfg.get("font_size", DEFAULT_FONT_SIZE),
         resolution=f"{cfg.get('width', DEFAULT_VIDEO_WIDTH)}x{cfg.get('height', DEFAULT_VIDEO_HEIGHT)}",
         fps=cfg.get("fps", DEFAULT_VIDEO_FPS),
-        command="highlight",
     )
 
 
-def _build_lipsync_args(job: Job, pdf_path: str, output_dir: str, db_session) -> argparse.Namespace:
+def _build_lipsync_request(
+    job: Job,
+    pdf_path: str,
+    output_dir: str,
+    db_session,
+) -> LipsyncPipelineRequest:
     cfg = job.config_json or {}
     output_filename = os.path.splitext(os.path.basename(pdf_path))[0] + "_lipsync.mp4"
 
@@ -93,9 +105,10 @@ def _build_lipsync_args(job: Job, pdf_path: str, output_dir: str, db_session) ->
         if ref_video:
             ref_video_path = get_upload_abs_path(ref_video.stored_path)
 
-    return argparse.Namespace(
+    return LipsyncPipelineRequest(
         pdf=pdf_path,
         output=output_filename,
+        format="mp4",
         output_dir=output_dir,
         backend=cfg.get("backend", "remote"),
         voice=cfg.get("voice"),
@@ -115,15 +128,12 @@ def _build_lipsync_args(job: Job, pdf_path: str, output_dir: str, db_session) ->
         font_size=cfg.get("font_size", DEFAULT_FONT_SIZE),
         resolution=f"{cfg.get('width', DEFAULT_VIDEO_WIDTH)}x{cfg.get('height', DEFAULT_VIDEO_HEIGHT)}",
         fps=cfg.get("fps", DEFAULT_VIDEO_FPS),
-        command="lipsync",
     )
 
 
 @celery_app.task(bind=True, max_retries=0)
 def run_pipeline_task(self, job_id: str):
     """Execute the appropriate screencastgen pipeline for a job."""
-    from screencastgen.cli import run_audio_pipeline, run_highlight_pipeline, run_lipsync_pipeline
-
     db_session = get_sync_session()
 
     try:
@@ -145,16 +155,15 @@ def run_pipeline_task(self, job_id: str):
         pdf_path = get_upload_abs_path(uploaded_file.stored_path)
         output_dir = get_output_dir(uuid.UUID(job_id))
 
-        # Build args namespace
         pipeline_type = job.pipeline_type.value
         if pipeline_type == "audio":
-            args = _build_audio_args(job, pdf_path, output_dir)
+            request = _build_audio_request(job, pdf_path, output_dir)
             pipeline_func = run_audio_pipeline
         elif pipeline_type == "highlight":
-            args = _build_highlight_args(job, pdf_path, output_dir)
+            request = _build_highlight_request(job, pdf_path, output_dir)
             pipeline_func = run_highlight_pipeline
         elif pipeline_type == "lipsync":
-            args = _build_lipsync_args(job, pdf_path, output_dir, db_session)
+            request = _build_lipsync_request(job, pdf_path, output_dir, db_session)
             pipeline_func = run_lipsync_pipeline
         else:
             job.status = JobStatus.failed
@@ -162,65 +171,33 @@ def run_pipeline_task(self, job_id: str):
             db_session.commit()
             return {"error": "Unknown pipeline"}
 
-        # Install progress bridge
-        bridge = ProgressBridge(
-            job_id=job_id,
-            db_session=db_session,
-            fallback_stdout=sys.stdout,
-        )
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        sys.stdout = bridge
-        sys.stderr = bridge
+        progress = JobProgressReporter(job_id=job_id, db_session=db_session)
+        reporter = PipelineReporter(stream=sys.stdout, on_event=progress.handle_event)
 
         try:
-            exit_code = pipeline_func(args)
-            if exit_code == 0:
-                output_path = get_output_abs_path(uuid.UUID(job_id), args.output)
-                if os.path.isfile(output_path):
-                    job.status = JobStatus.completed
-                    job.progress_phase = "done"
-                    job.error_message = None
-                    job.output_path = args.output
-                else:
-                    job.status = JobStatus.failed
-                    job.error_message = f"Pipeline completed without producing output: {args.output}"
+            result = pipeline_func(request, reporter=reporter)
+            if result.exit_code == 0 and result.output_path and os.path.isfile(result.output_path):
+                job.status = JobStatus.completed
+                job.progress_phase = "done"
+                job.error_message = None
+                job.output_path = result.output_name
             else:
                 job.status = JobStatus.failed
-                job.error_message = f"Pipeline returned exit code {exit_code}"
-        except SystemExit as e:
+                job.error_message = result.error_message or f"Pipeline returned exit code {result.exit_code}"
+        except Exception as exc:
             job.status = JobStatus.failed
-            job.error_message = (
-                "; ".join(bridge.captured_errors)
-                if bridge.captured_errors
-                else f"Pipeline exited with code {e.code}"
-            )
-        except Exception as e:
-            job.status = JobStatus.failed
-            job.error_message = str(e)
+            job.error_message = str(exc)
         finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
-            bridge.close()
             db_session.commit()
-
-            # Publish terminal event
-            import redis as redis_lib
-            try:
-                r = redis_lib.Redis.from_url(settings.REDIS_URL)
-                r.publish(f"job:{job_id}:progress", json.dumps({
-                    "job_id": job_id,
-                    "status": job.status.value,
-                    "phase": job.progress_phase or "done",
-                    "current": job.progress_current,
-                    "total": job.progress_total,
-                    "message": job.error_message or "",
-                }))
-                r.close()
-            except Exception:
-                pass
+            progress.publish_terminal(
+                status=job.status.value,
+                phase=job.progress_phase or "done",
+                current=job.progress_current,
+                total=job.progress_total,
+                message=job.error_message or "",
+            )
+            progress.close()
 
         return {"status": job.status.value}
-
     finally:
         db_session.close()

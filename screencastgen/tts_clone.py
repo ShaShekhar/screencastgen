@@ -5,7 +5,7 @@ Imports are deferred so the module can be imported without torch/f5-tts installe
 
 from typing import Optional
 
-from .backends.base import resolve_device
+from .providers.tts.base import resolve_device
 from .constants import DEFAULT_CLONE_CHUNK_BYTES
 
 

@@ -162,7 +162,7 @@ screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4 --li
 
 The runtime is now split into three independently selectable layers:
 
-- TTS backend: selected with `--backend` and implemented under `screencastgen/backends/`
+- TTS backend: selected with `--backend` and implemented under `screencastgen/providers/tts/`
 - Alignment provider: selected with `--aligner` and dispatched from `screencastgen/aligner.py`
 - Lip-sync provider: selected with `--lipsync-provider` and dispatched from `screencastgen/lipsync.py`
 
@@ -265,12 +265,20 @@ screencastgen/
   inference_server.py   FastAPI GPU inference server
   remote_gpu.py         HTTP client for remote alignment and lip-sync
   models.py             Model download and cache management
-  backends/
-    __init__.py         Backend registry, spec loading, and factory
-    base.py             Shared backend metadata and helpers
-    qwen_backend.py     Qwen3-TTS backend + spec
-    f5_tts.py           F5-TTS backend shim + spec
-    remote_tts.py       Remote TTS backend + spec (HTTP client)
+  providers/
+    tts/
+      __init__.py       TTS registry, spec loading, and factory
+      base.py           Shared TTS backend metadata and helpers
+      qwen_backend.py   Qwen3-TTS backend + spec
+      f5_tts.py         F5-TTS backend shim + spec
+      remote_tts.py     Remote TTS backend + spec (HTTP client)
+    align/
+      __init__.py       Alignment provider registry
+      whisperx_provider.py  WhisperX alignment provider
+    lipsync/
+      __init__.py       Lip-sync provider registry
+      latentsync_provider.py LatentSync provider
+      wav2lip_provider.py    Wav2Lip provider
   highlight_renderer.py Text highlight frame renderer
   video_composer.py     Video composition (highlight + lipsync)
 web/                    Full-stack web application

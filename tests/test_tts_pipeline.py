@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from screencastgen.backends import BACKEND_NAMES, create_backend
+from screencastgen.providers.tts import BACKEND_NAMES, create_backend
 from screencastgen.concatenator import _find_chunk_files, concatenate
 from screencastgen.constants import (
     DEFAULT_CLONE_CHUNK_BYTES,
@@ -480,13 +480,13 @@ class TestBackendRegistry:
         with pytest.raises(ValueError, match="Unknown backend"):
             create_backend("nonexistent")
 
-    @patch("screencastgen.backends.qwen_backend.QwenTTS")
+    @patch("screencastgen.providers.tts.qwen_backend.QwenTTS")
     def test_create_qwen_backend(self, mock_cls):
         mock_cls.return_value = MagicMock()
         backend = create_backend("qwen", language="en-US", device="cpu")
         mock_cls.assert_called_once()
 
-    @patch("screencastgen.backends.remote_tts.RemoteTTS")
+    @patch("screencastgen.providers.tts.remote_tts.RemoteTTS")
     def test_create_remote_backend(self, mock_cls):
         mock_cls.return_value = MagicMock()
         backend = create_backend("remote", server_url="http://test:8100")

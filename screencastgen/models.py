@@ -4,12 +4,12 @@ import os
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
-from .backends import (
+from .providers.tts import (
     get_backend_spec,
     get_downloadable_backend_names,
     register_backend_download_args,
 )
-from .backends.base import BackendArg
+from .providers.tts.base import BackendArg
 
 
 @dataclass(frozen=True)

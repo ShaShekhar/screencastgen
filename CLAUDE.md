@@ -51,8 +51,8 @@ The shared pipeline (steps 1–5 in `cli.py`) is: extract → preprocess → spl
 
 - **Deferred imports**: Heavy deps (torch, whisperx, moviepy, f5-tts, qwen-tts, latentsync) are imported inside functions, not at module top. This lets `screencastgen --help` work without all deps installed. Maintain this pattern.
 - **Resumable processing**: `ProcessingTracker` persists state to a JSON file (`processing_status.json`). Chunks are keyed by number + MD5 hash, so re-runs skip already-completed work. The tracker also stores alignment and video rendering state.
-- **TTSBackend protocol**: `types.py` defines a `TTSBackend` Protocol with `synthesize(text, output_path)`, `max_chunk_bytes`, and `output_format` properties. Backends: `QwenTTS`, `F5TTSBackend`, `RemoteTTS`. All live in `screencastgen/backends/`.
-- **Backend registry**: `backends/__init__.py` has a lazy-import registry. `create_backend(name, **kwargs)` instantiates any backend by name (`qwen`, `f5`, `remote`).
+- **TTSBackend protocol**: `types.py` defines a `TTSBackend` Protocol with `synthesize(text, output_path)`, `max_chunk_bytes`, and `output_format` properties. TTS providers (`QwenTTS`, `F5TTSBackend`, `RemoteTTS`) live under `screencastgen/providers/tts/`.
+- **TTS registry**: `providers/tts/__init__.py` has a lazy-import registry. `create_backend(name, **kwargs)` instantiates any backend by name (`qwen`, `f5`, `remote`).
 - **Byte-based limits**: All chunk/sentence sizing uses UTF-8 byte length (not character count). Each backend declares its own `max_chunk_bytes` property. Constants in `constants.py` provide defaults.
 - **CPU/GPU VM split**: The `remote` backend delegates TTS, WhisperX alignment, and lip-sync generation to a GPU inference server (`inference_server.py`) over HTTP. The CPU VM only needs PyPDF2 + stdlib. Client helpers in `remote_gpu.py`.
 

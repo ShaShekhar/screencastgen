@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`screencastgen/` contains the Python package and CLI pipelines. Core entry points live in `screencastgen/cli.py` and `screencastgen/__main__.py`; backend adapters are in `screencastgen/backends/`; document, audio, alignment, and video helpers are split across focused modules such as `extractor.py`, `aligner.py`, and `video_composer.py`.
+`screencastgen/` contains the Python package and CLI pipelines. Core entry points live in `screencastgen/cli.py` and `screencastgen/__main__.py`; pluggable runtime implementations live under `screencastgen/providers/` (`tts/`, `align/`, `lipsync/`); document, audio, alignment, and video helpers are split across focused modules such as `extractor.py`, `aligner.py`, and `video_composer.py`.
 
 `web/` holds the full-stack UI. `web/backend/` is a FastAPI app with Alembic migrations, routers, services, and Celery tasks. `web/frontend/` is a Vite + React + TypeScript SPA; pages live in `src/pages/`, shared UI in `src/components/`, and HTTP clients in `src/api/`.
 

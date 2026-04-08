@@ -199,7 +199,7 @@ app = _create_app()
 # ---------------------------------------------------------------------------
 
 def _build_server_parser() -> argparse.ArgumentParser:
-    from .backends import (
+    from .providers.tts import (
         get_backend_names,
         get_default_backend_name,
         register_backend_args,
@@ -253,11 +253,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     # Resolve device
-    from .backends.base import resolve_device
+    from .providers.tts.base import resolve_device
     _device = resolve_device(args.device)
 
     # Build the TTS backend eagerly so the model is loaded before serving
-    from .backends import create_backend_from_args
+    from .providers.tts import create_backend_from_args
 
     _backend_name = args.backend
     _aligner_name = args.aligner

@@ -1,0 +1,94 @@
+"""Pipeline request/result types."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, fields
+from typing import Any, Optional, Type, TypeVar
+
+from ..constants import (
+    DEFAULT_FONT_SIZE,
+    DEFAULT_LANGUAGE,
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_STATUS_FILE,
+    DEFAULT_VIDEO_FPS,
+    DEFAULT_VIDEO_HEIGHT,
+    DEFAULT_VIDEO_WIDTH,
+)
+
+
+@dataclass
+class BasePipelineRequest:
+    """Options shared by all pipeline runners."""
+
+    pdf: str
+    output: Optional[str] = None
+    output_dir: str = DEFAULT_OUTPUT_DIR
+    language: str = DEFAULT_LANGUAGE
+    status_file: str = DEFAULT_STATUS_FILE
+    clean: bool = False
+    verbose: bool = False
+
+
+@dataclass
+class TTSRequest(BasePipelineRequest):
+    """Common TTS-related options."""
+
+    backend: str = "qwen"
+    device: str = "auto"
+    voice: Optional[str] = None
+    model: Optional[str] = None
+    ref_audio: Optional[str] = None
+    ref_text: Optional[str] = None
+    tts_server_url: Optional[str] = None
+    aligner: str = "whisperx"
+
+
+@dataclass
+class AudioPipelineRequest(TTSRequest):
+    """Input for the audio pipeline."""
+
+    no_concat: bool = False
+
+
+@dataclass
+class HighlightPipelineRequest(TTSRequest):
+    """Input for the highlight pipeline."""
+
+    format: str = "epub"
+    font_size: int = DEFAULT_FONT_SIZE
+    resolution: str = f"{DEFAULT_VIDEO_WIDTH}x{DEFAULT_VIDEO_HEIGHT}"
+    fps: int = DEFAULT_VIDEO_FPS
+
+
+@dataclass
+class LipsyncPipelineRequest(HighlightPipelineRequest):
+    """Input for the lip-sync pipeline."""
+
+    ref_video: str = ""
+    lipsync_provider: str = "auto"
+    face_position: str = "left"
+
+
+@dataclass
+class PipelineRunResult:
+    """Return value for a pipeline run."""
+
+    exit_code: int
+    output_name: Optional[str] = None
+    output_path: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+RequestT = TypeVar("RequestT", bound=BasePipelineRequest)
+
+
+def coerce_request(request_type: Type[RequestT], value: Any) -> RequestT:
+    """Convert *value* into *request_type* when needed."""
+    if isinstance(value, request_type):
+        return value
+
+    data = {}
+    for field in fields(request_type):
+        if hasattr(value, field.name):
+            data[field.name] = getattr(value, field.name)
+    return request_type(**data)

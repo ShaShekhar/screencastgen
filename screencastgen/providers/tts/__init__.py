@@ -1,13 +1,13 @@
-"""TTS backend registry with lazy imports."""
+"""TTS backend registry."""
 
 from typing import Any, Dict, List, Optional
 
 from .base import BackendSpec
 
 _BACKEND_MODULES: Dict[str, str] = {
-    "qwen": "screencastgen.backends.qwen_backend",
-    "f5": "screencastgen.backends.f5_tts",
-    "remote": "screencastgen.backends.remote_tts",
+    "qwen": "screencastgen.providers.tts.qwen_backend",
+    "f5": "screencastgen.providers.tts.f5_tts",
+    "remote": "screencastgen.providers.tts.remote_tts",
 }
 
 BACKEND_NAMES: List[str] = list(_BACKEND_MODULES.keys())
