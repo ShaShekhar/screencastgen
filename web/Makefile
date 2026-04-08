@@ -1,5 +1,8 @@
 .PHONY: dev backend worker frontend migrate docker-up docker-down install
 
+# The repo root must be on PYTHONPATH so that `web.backend.*` imports resolve.
+export PYTHONPATH := $(CURDIR)/..
+
 # --- Local development (requires PostgreSQL + Redis running locally) ---
 
 install:
@@ -17,7 +20,7 @@ frontend:
 	cd frontend && npm run dev
 
 migrate:
-	cd backend && PYTHONPATH=$(CURDIR)/.. alembic upgrade head
+	cd backend && alembic upgrade head
 
 dev:
 	@echo "Run these in separate terminals:"
