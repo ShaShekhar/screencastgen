@@ -7,6 +7,7 @@ import os
 import sys
 import traceback
 import uuid
+from typing import Optional
 
 from screencastgen.aligner import get_default_alignment_provider
 from screencastgen.constants import (
@@ -62,9 +63,51 @@ def _build_audio_request(job: Job, pdf_path: str, output_dir: str) -> AudioPipel
     )
 
 
-def _build_highlight_request(job: Job, pdf_path: str, output_dir: str) -> HighlightPipelineRequest:
+def _resolve_highlight_voice(
+    cfg: dict, job: Job, db_session
+) -> tuple[Optional[str], Optional[str]]:
+    """Resolve the (ref_audio_path, ref_text) to use for the highlight job.
+
+    Priority:
+        1. Bundled voice id (``voice_id`` in cfg) — looks up the manifest.
+        2. Uploaded reference audio file (``ref_audio_file_id`` in cfg or
+           ``job.ref_audio_file_id``).
+        3. None — backend uses its built-in default voice.
+    """
+    voice_id = cfg.get("voice_id")
+    if voice_id:
+        # Imported lazily so the worker doesn't pull voices on import.
+        from ..services.voices import get_voice
+
+        voice = get_voice(voice_id)
+        if voice and voice.exists:
+            return voice.abs_path, cfg.get("ref_text") or voice.ref_text
+        logger.warning("Bundled voice '%s' not found or missing audio", voice_id)
+
+    ref_id = cfg.get("ref_audio_file_id") or job.ref_audio_file_id
+    if ref_id:
+        try:
+            ref_uuid = uuid.UUID(str(ref_id))
+        except ValueError:
+            ref_uuid = None
+        if ref_uuid:
+            uploaded = db_session.get(UploadedFile, ref_uuid)
+            if uploaded:
+                return get_upload_abs_path(uploaded.stored_path), cfg.get("ref_text")
+
+    return None, cfg.get("ref_text")
+
+
+def _build_highlight_request(
+    job: Job,
+    pdf_path: str,
+    output_dir: str,
+    db_session,
+) -> HighlightPipelineRequest:
     cfg = job.config_json or {}
     output_filename = os.path.splitext(os.path.basename(pdf_path))[0] + "_highlight.mp4"
+
+    ref_audio_path, ref_text = _resolve_highlight_voice(cfg, job, db_session)
 
     return HighlightPipelineRequest(
         pdf=pdf_path,
@@ -75,8 +118,8 @@ def _build_highlight_request(job: Job, pdf_path: str, output_dir: str) -> Highli
         voice=cfg.get("voice"),
         language=cfg.get("language", DEFAULT_LANGUAGE),
         model=cfg.get("model"),
-        ref_audio=cfg.get("ref_audio"),
-        ref_text=cfg.get("ref_text"),
+        ref_audio=ref_audio_path,
+        ref_text=ref_text,
         device=cfg.get("device", "auto"),
         tts_server_url=cfg.get("tts_server_url", settings.TTS_SERVER_URL),
         aligner=cfg.get("aligner", get_default_alignment_provider()),
@@ -168,7 +211,7 @@ def run_pipeline_task(self, job_id: str):
             request = _build_audio_request(job, pdf_path, output_dir)
             pipeline_func = run_audio_pipeline
         elif pipeline_type == "highlight":
-            request = _build_highlight_request(job, pdf_path, output_dir)
+            request = _build_highlight_request(job, pdf_path, output_dir, db_session)
             pipeline_func = run_highlight_pipeline
         elif pipeline_type == "lipsync":
             request = _build_lipsync_request(job, pdf_path, output_dir, db_session)

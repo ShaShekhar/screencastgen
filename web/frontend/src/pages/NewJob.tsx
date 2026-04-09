@@ -7,7 +7,6 @@ import PipelineSelector from "../components/PipelineSelector";
 import VideoSettings from "../components/VideoSettings";
 import VoiceSettings from "../components/VoiceSettings";
 import {
-  AudioConfig,
   HighlightConfig,
   JobCreateRequest,
   LipsyncConfig,
@@ -15,13 +14,12 @@ import {
   UploadedFile,
 } from "../types";
 
-const DEFAULT_AUDIO: AudioConfig = {
+const DEFAULT_HIGHLIGHT: HighlightConfig = {
   language: "en-US",
   aligner: "whisperx",
-};
-
-const DEFAULT_HIGHLIGHT: HighlightConfig = {
-  ...DEFAULT_AUDIO,
+  voice_id: null,
+  ref_audio_file_id: null,
+  ref_text: null,
   font_size: 32,
   width: 1280,
   height: 720,
@@ -45,9 +43,8 @@ const DEFAULT_LIPSYNC: LipsyncConfig = {
 
 export default function NewJob() {
   const navigate = useNavigate();
-  const [pipeline, setPipeline] = useState<PipelineType>("audio");
+  const [pipeline, setPipeline] = useState<PipelineType>("highlight");
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
-  const [audioConfig, setAudioConfig] = useState<AudioConfig>(DEFAULT_AUDIO);
   const [highlightConfig, setHighlightConfig] =
     useState<HighlightConfig>(DEFAULT_HIGHLIGHT);
   const [lipsyncConfig, setLipsyncConfig] =
@@ -76,9 +73,7 @@ export default function NewJob() {
       uploaded_file_id: uploadedFile.id,
     };
 
-    if (pipeline === "audio") {
-      req.audio_config = audioConfig;
-    } else if (pipeline === "highlight") {
+    if (pipeline === "highlight") {
       req.highlight_config = highlightConfig;
     } else {
       req.lipsync_config = lipsyncConfig;
@@ -125,10 +120,6 @@ export default function NewJob() {
           3. Settings
         </h2>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
-          {pipeline === "audio" && (
-            <VoiceSettings config={audioConfig} onChange={setAudioConfig} />
-          )}
-
           {pipeline === "highlight" && (
             <div className="space-y-6">
               <VoiceSettings

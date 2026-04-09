@@ -16,12 +16,24 @@ class RemoteTTS:
         server_url: str = "http://localhost:8100",
         language: str = "en-US",
         timeout: int = 300,
+        ref_audio_path: Optional[str] = None,
+        ref_text: Optional[str] = None,
     ):
         self.server_url = server_url.rstrip("/")
         self.language = language
         self.timeout = timeout
+        self.ref_audio_path = ref_audio_path
+        self.ref_text = ref_text
         self._server_format: Optional[str] = None
         self._server_max_bytes: Optional[int] = None
+        self._ref_audio_bytes: Optional[bytes] = None
+        if ref_audio_path:
+            try:
+                with open(ref_audio_path, "rb") as f:
+                    self._ref_audio_bytes = f.read()
+            except OSError as exc:
+                print(f"  Warning: could not read ref audio {ref_audio_path}: {exc}")
+                self._ref_audio_bytes = None
         self._fetch_server_info()
 
     def _fetch_server_info(self):
@@ -56,21 +68,65 @@ class RemoteTTS:
     def synthesize(self, text: str, output_path: str) -> None:
         """Send *text* to the inference server and save the audio to *output_path*."""
         import json
+        import os
         import urllib.request
 
-        payload = json.dumps(
-            {
-                "text": text,
-                "language": self.language,
-            }
-        ).encode("utf-8")
+        url = f"{self.server_url}/synthesize"
 
-        req = urllib.request.Request(
-            f"{self.server_url}/synthesize",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+        if self._ref_audio_bytes:
+            # Multipart with per-request reference voice override.
+            boundary = "----ScreencastgenRemoteTTSBoundary"
+            parts: list[bytes] = []
+
+            def add_field(name: str, value: str) -> None:
+                parts.append(
+                    (
+                        f"--{boundary}\r\n"
+                        f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
+                        f"{value}\r\n"
+                    ).encode("utf-8")
+                )
+
+            add_field("text", text)
+            add_field("language", self.language)
+            if self.ref_text:
+                add_field("ref_text", self.ref_text)
+
+            ref_filename = (
+                os.path.basename(self.ref_audio_path) if self.ref_audio_path else "ref.wav"
+            )
+            parts.append(
+                (
+                    f"--{boundary}\r\n"
+                    f'Content-Disposition: form-data; name="ref_audio"; filename="{ref_filename}"\r\n'
+                    f"Content-Type: audio/wav\r\n\r\n"
+                ).encode("utf-8")
+            )
+            parts.append(self._ref_audio_bytes)
+            parts.append(b"\r\n")
+            parts.append(f"--{boundary}--\r\n".encode("utf-8"))
+
+            body = b"".join(parts)
+            req = urllib.request.Request(
+                url,
+                data=body,
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                method="POST",
+            )
+        else:
+            payload = json.dumps(
+                {
+                    "text": text,
+                    "language": self.language,
+                }
+            ).encode("utf-8")
+
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
 
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -89,6 +145,8 @@ def _build_kwargs(args, invocation: str):
     return {
         "server_url": getattr(args, "tts_server_url", "http://localhost:8100"),
         "language": getattr(args, "language", "en-US"),
+        "ref_audio_path": getattr(args, "ref_audio", None),
+        "ref_text": getattr(args, "ref_text", None),
     }
 
 

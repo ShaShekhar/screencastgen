@@ -1,10 +1,10 @@
 """Pydantic request/response schemas."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from screencastgen.constants import (
     DEFAULT_FONT_SIZE,
@@ -26,10 +26,25 @@ class AudioConfig(BaseModel):
 
 
 class HighlightConfig(AudioConfig):
+    # Voice selection: either a bundled voice id or an uploaded reference
+    # audio file id. Both are optional — when neither is set, the GPU
+    # server's default voice is used.
+    voice_id: Optional[str] = None
+    ref_audio_file_id: Optional[UUID] = None
+    ref_text: Optional[str] = None
+
     font_size: int = DEFAULT_FONT_SIZE
     width: int = DEFAULT_VIDEO_WIDTH
     height: int = DEFAULT_VIDEO_HEIGHT
     fps: int = DEFAULT_VIDEO_FPS
+
+    @model_validator(mode="after")
+    def _voice_xor(self) -> "HighlightConfig":
+        if self.voice_id and self.ref_audio_file_id:
+            raise ValueError(
+                "Provide either voice_id (bundled) or ref_audio_file_id (uploaded), not both"
+            )
+        return self
 
 
 class LipsyncConfig(BaseModel):

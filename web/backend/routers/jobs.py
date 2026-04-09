@@ -20,7 +20,10 @@ def _build_config(req: JobCreateRequest) -> dict:
     if req.pipeline_type == "audio" and req.audio_config:
         return req.audio_config.model_dump()
     elif req.pipeline_type == "highlight" and req.highlight_config:
-        return req.highlight_config.model_dump()
+        cfg = req.highlight_config.model_dump()
+        if cfg.get("ref_audio_file_id") is not None:
+            cfg["ref_audio_file_id"] = str(cfg["ref_audio_file_id"])
+        return cfg
     elif req.pipeline_type == "lipsync" and req.lipsync_config:
         cfg = req.lipsync_config.model_dump()
         cfg["ref_audio_file_id"] = str(cfg["ref_audio_file_id"])
@@ -46,6 +49,12 @@ async def create_job(req: JobCreateRequest):
                 f = await session.get(UploadedFile, fid)
                 if not f:
                     raise HTTPException(404, f"{label} file not found")
+        elif req.pipeline_type == "highlight" and req.highlight_config:
+            if req.highlight_config.ref_audio_file_id:
+                ref_audio_id = req.highlight_config.ref_audio_file_id
+                f = await session.get(UploadedFile, ref_audio_id)
+                if not f:
+                    raise HTTPException(404, "Reference audio file not found")
 
         config = _build_config(req)
 

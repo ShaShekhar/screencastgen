@@ -9,7 +9,7 @@ from .config import settings
 from .database import async_engine
 from .logging_config import setup_logging
 from .models import Base
-from .routers import events, jobs, uploads
+from .routers import events, jobs, uploads, voices
 
 setup_logging("backend")
 
@@ -39,6 +39,7 @@ app.add_middleware(
 app.include_router(uploads.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
+app.include_router(voices.router, prefix="/api")
 
 
 @app.get("/api/health")

@@ -1,0 +1,20 @@
+{
+  "voices": [
+    {
+      "id": "narrator-en-male",
+      "name": "Aiden (English, Male)",
+      "language": "en-US",
+      "description": "Calm narrator voice, suitable for non-fiction audiobooks.",
+      "file": "narrator-en-male.wav",
+      "ref_text": "The quick brown fox jumps over the lazy dog. This is a sample of a calm narrator voice."
+    },
+    {
+      "id": "narrator-en-female",
+      "name": "Iris (English, Female)",
+      "language": "en-US",
+      "description": "Warm female narrator, well suited to fiction and storytelling.",
+      "file": "narrator-en-female.wav",
+      "ref_text": "Once upon a time, in a quiet village beside a winding river, a curious story began to unfold."
+    }
+  ]
+}

@@ -7,25 +7,20 @@ interface Props {
 
 const PIPELINES: { type: PipelineType; title: string; desc: string }[] = [
   {
-    type: "audio",
-    title: "Audio",
-    desc: "Convert PDF to audio using Qwen3-TTS",
-  },
-  {
     type: "highlight",
-    title: "Highlight Video",
-    desc: "Audio with word-by-word highlighted text video",
+    title: "Highlight Text Audio",
+    desc: "Audiobook-style narration with synced word-by-word highlighted text video",
   },
   {
     type: "lipsync",
     title: "Lip-Sync Video",
-    desc: "Voice-cloned audio with lip-synced talking head",
+    desc: "Voice-cloned audio with a lip-synced talking head overlay",
   },
 ];
 
 export default function PipelineSelector({ selected, onChange }: Props) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {PIPELINES.map((p) => (
         <button
           key={p.type}

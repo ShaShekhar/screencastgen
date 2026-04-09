@@ -47,10 +47,27 @@ export interface AudioConfig {
 }
 
 export interface HighlightConfig extends AudioConfig {
+  voice_id?: string | null;
+  ref_audio_file_id?: string | null;
+  ref_text?: string | null;
   font_size: number;
   width: number;
   height: number;
   fps: number;
+}
+
+export interface BundledVoice {
+  id: string;
+  name: string;
+  language: string;
+  description: string;
+  ref_text: string;
+  available: boolean;
+}
+
+export interface LanguageOption {
+  code: string;
+  name: string;
 }
 
 export interface LipsyncConfig {
