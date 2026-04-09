@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
+import traceback
 import uuid
 
 from screencastgen.aligner import get_default_alignment_provider
@@ -32,6 +34,8 @@ from ..config import settings
 from ..database import get_sync_session
 from ..models import Job, JobStatus, UploadedFile
 from ..services.storage import get_upload_abs_path, get_output_dir
+
+logger = logging.getLogger(__name__)
 
 
 def _build_audio_request(job: Job, pdf_path: str, output_dir: str) -> AudioPipelineRequest:
@@ -136,11 +140,13 @@ def _build_lipsync_request(
 @celery_app.task(bind=True, max_retries=0)
 def run_pipeline_task(self, job_id: str):
     """Execute the appropriate screencastgen pipeline for a job."""
+    logger.info("Starting pipeline task for job %s", job_id)
     db_session = get_sync_session()
 
     try:
         job = db_session.get(Job, uuid.UUID(job_id))
         if not job:
+            logger.error("Job %s not found in database", job_id)
             return {"error": "Job not found"}
 
         job.status = JobStatus.running
@@ -176,6 +182,10 @@ def run_pipeline_task(self, job_id: str):
         progress = JobProgressReporter(job_id=job_id, db_session=db_session)
         reporter = PipelineReporter(stream=sys.stdout, on_event=progress.handle_event)
 
+        logger.info(
+            "Dispatching %s pipeline for job %s (pdf=%s, output_dir=%s)",
+            pipeline_type, job_id, pdf_path, output_dir,
+        )
         try:
             result = pipeline_func(request, reporter=reporter)
             if result.exit_code == 0 and result.output_path and os.path.isfile(result.output_path):
@@ -183,12 +193,21 @@ def run_pipeline_task(self, job_id: str):
                 job.progress_phase = "done"
                 job.error_message = None
                 job.output_path = result.output_name
+                logger.info(
+                    "Job %s completed -> %s", job_id, result.output_path
+                )
             else:
                 job.status = JobStatus.failed
                 job.error_message = result.error_message or f"Pipeline returned exit code {result.exit_code}"
+                logger.error(
+                    "Job %s failed (exit=%s): %s",
+                    job_id, result.exit_code, job.error_message,
+                )
         except Exception as exc:
+            tb = traceback.format_exc()
+            logger.exception("Pipeline crashed for job %s", job_id)
             job.status = JobStatus.failed
-            job.error_message = str(exc)
+            job.error_message = f"{exc}\n\n{tb}"
         finally:
             db_session.commit()
             progress.publish_terminal(

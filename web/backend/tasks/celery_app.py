@@ -1,8 +1,19 @@
 """Celery application configuration."""
 
 from celery import Celery
+from celery.signals import worker_process_init
 
 from ..config import settings
+from ..logging_config import setup_logging
+
+
+@worker_process_init.connect
+def _init_worker_logging(**_kwargs):
+    setup_logging("worker")
+
+
+# Also configure for the master process so import-time errors are captured.
+setup_logging("worker")
 
 celery_app = Celery(
     "screencastgen_web",

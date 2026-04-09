@@ -99,14 +99,14 @@ export default function NewJob() {
     <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">New Job</h1>
 
-      {/* Step 1: Upload PDF */}
+      {/* Step 1: Upload document */}
       <section className="mb-8">
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          1. Upload PDF
+          1. Upload Document
         </h2>
         <FileUploader
-          accept=".pdf"
-          label="Upload your PDF file"
+          accept=".pdf,.txt,.epub"
+          label="Upload a PDF, TXT, or EPUB file"
           onUploaded={setUploadedFile}
         />
       </section>

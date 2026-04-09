@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 
 import redis
@@ -10,6 +11,8 @@ import redis
 from screencastgen.pipelines.events import PipelineEvent
 
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class JobProgressReporter:
@@ -33,24 +36,30 @@ class JobProgressReporter:
                 job.progress_phase = event.phase
                 self.db_session.commit()
         except Exception:
-            pass
+            logger.exception("Failed to persist progress for job %s", self.job_id)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                logger.exception("Rollback failed for job %s", self.job_id)
 
+        payload = {
+            "job_id": self.job_id,
+            "status": event.status,
+            "phase": event.phase,
+            "current": event.current,
+            "total": event.total,
+            "message": event.message,
+        }
+        logger.info("progress %s", payload)
         try:
             self._redis.publish(
                 f"job:{self.job_id}:progress",
-                json.dumps(
-                    {
-                        "job_id": self.job_id,
-                        "status": event.status,
-                        "phase": event.phase,
-                        "current": event.current,
-                        "total": event.total,
-                        "message": event.message,
-                    }
-                ),
+                json.dumps(payload),
             )
         except Exception:
-            pass
+            logger.exception(
+                "Failed to publish progress to Redis for job %s", self.job_id
+            )
 
     def publish_terminal(self, *, status: str, phase: str, current: int, total: int, message: str = "") -> None:
         """Publish a terminal event after the pipeline exits."""
@@ -68,4 +77,4 @@ class JobProgressReporter:
         try:
             self._redis.close()
         except Exception:
-            pass
+            logger.exception("Failed to close Redis client for job %s", self.job_id)

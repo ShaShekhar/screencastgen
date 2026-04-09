@@ -7,8 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import async_engine
+from .logging_config import setup_logging
 from .models import Base
 from .routers import events, jobs, uploads
+
+setup_logging("backend")
 
 
 @asynccontextmanager
