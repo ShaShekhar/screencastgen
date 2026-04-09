@@ -4,7 +4,10 @@ from celery import Celery
 
 from ..config import settings
 
-celery_app = Celery("screencastgen_web")
+celery_app = Celery(
+    "screencastgen_web",
+    include=["web.backend.tasks.pipelines"],
+)
 
 celery_app.conf.update(
     broker_url=settings.REDIS_URL,
