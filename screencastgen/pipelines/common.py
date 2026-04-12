@@ -322,3 +322,26 @@ def build_title(pdf_path: str) -> str:
     from pathlib import Path
 
     return Path(pdf_path).stem.replace("_", " ").replace("-", " ").title()
+
+
+def extract_words_with_bboxes_safe(pdf_path, reporter=None):
+    """Extract word bounding boxes from a PDF, returning ``None`` on failure.
+
+    Returns ``None`` when PyMuPDF is not installed or the file is not a PDF,
+    allowing callers to fall back to the plain text renderer.
+    """
+    reporter = get_reporter(reporter)
+    ext = os.path.splitext(pdf_path)[1].lower()
+    if ext != ".pdf":
+        return None
+    try:
+        from ..extractor import extract_words_with_bboxes
+
+        reporter.line("  Extracting word positions from PDF...")
+        return extract_words_with_bboxes(pdf_path)
+    except ImportError:
+        reporter.line("  pymupdf not installed — falling back to text overlay renderer")
+        return None
+    except Exception as exc:
+        reporter.line(f"  Warning: could not extract word bboxes: {exc}")
+        return None

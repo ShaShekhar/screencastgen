@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 screencastgen converts text documents (PDF, EPUB, plain text, and more) into audio files, highlighted-text videos, or lip-synced talking-head videos. It has three pipelines accessible via subcommands:
 
 - **`audio`** — document → text → TTS → concatenated audio file (default, also works without subcommand for backward compat)
-- **`highlight`** — Same as audio, plus WhisperX alignment → word-highlighted video (moviepy)
-- **`lipsync`** — document → text → voice cloning TTS → WhisperX alignment → LatentSync/Wav2Lip face animation → composite video with highlighted text
+- **`highlight`** — Same as audio, plus WhisperX alignment → word-highlighted video (moviepy). For PDF inputs, highlights words on the actual page images; for other inputs, renders text on a plain background.
+- **`lipsync`** — document → text → voice cloning TTS → WhisperX alignment → LatentSync/Wav2Lip face animation → composite video with highlighted text. Face overlay composited on PDF page images (or plain text frames).
 
 ## Commands
 
@@ -49,7 +49,8 @@ The shared pipeline (steps 1–5 in `cli.py`) is: extract → preprocess → spl
 
 **Key design patterns:**
 
-- **Deferred imports**: Heavy deps (torch, whisperx, moviepy, f5-tts, qwen-tts, latentsync) are imported inside functions, not at module top. This lets `screencastgen --help` work without all deps installed. Maintain this pattern.
+- **Deferred imports**: Heavy deps (torch, whisperx, moviepy, f5-tts, qwen-tts, latentsync, pymupdf) are imported inside functions, not at module top. This lets `screencastgen --help` work without all deps installed. Maintain this pattern.
+- **Page-image rendering**: For PDF inputs, `PageRenderer` rasterises actual PDF pages and highlights words at their real bounding-box positions. `WordMatcher` maps WhisperX-aligned words back to PDF bounding boxes via sequential normalised matching. Falls back to `HighlightRenderer` (plain text on dark background) for non-PDF inputs or when PyMuPDF is not installed.
 - **Resumable processing**: `ProcessingTracker` persists state to a JSON file (`processing_status.json`). Chunks are keyed by number + MD5 hash, so re-runs skip already-completed work. The tracker also stores alignment and video rendering state.
 - **TTSBackend protocol**: `types.py` defines a `TTSBackend` Protocol with `synthesize(text, output_path)`, `max_chunk_bytes`, and `output_format` properties. TTS providers (`QwenTTS`, `F5TTSBackend`, `RemoteTTS`) live under `screencastgen/providers/tts/`.
 - **TTS registry**: `providers/tts/__init__.py` has a lazy-import registry. `create_backend(name, **kwargs)` instantiates any backend by name (`qwen`, `f5`, `remote`).
@@ -63,8 +64,8 @@ The shared pipeline (steps 1–5 in `cli.py`) is: extract → preprocess → spl
 | Core            | PyPDF2                                          |
 | Qwen3 TTS      | qwen-tts, torch, soundfile                      |
 | Concatenation   | pydub (preferred) or ffmpeg CLI                 |
-| Highlight video | whisperx, moviepy, Pillow, torch                |
-| Lip-sync video  | f5-tts, latentsync (or wav2lip), ffmpeg/ffprobe |
+| Highlight video | whisperx, moviepy, Pillow, torch, pymupdf       |
+| Lip-sync video  | f5-tts, pymupdf, latentsync (or wav2lip), ffmpeg/ffprobe |
 | GPU server      | fastapi, uvicorn, python-multipart              |
 | Web app         | fastapi, sqlalchemy, celery, redis, asyncpg      |
 | Web frontend    | react, react-router-dom, axios, tailwindcss       |

@@ -15,6 +15,7 @@ from .common import (
     create_tts_backend,
     extract_and_chunk,
     extract_and_chunk_paged,
+    extract_words_with_bboxes_safe,
     get_reporter,
     gpu_server_url,
     has_failed_chunks,
@@ -61,6 +62,7 @@ def run_highlight_pipeline(
     try:
         tracker = prepare_tracker(request)
         page_map = None
+        pdf_words = None
         if fmt == "epub":
             chunks, page_map = extract_and_chunk_paged(
                 request,
@@ -75,6 +77,7 @@ def run_highlight_pipeline(
                 max_chunk_bytes=backend.max_chunk_bytes,
                 reporter=reporter,
             )
+            pdf_words = extract_words_with_bboxes_safe(request.pdf, reporter=reporter)
 
         max_tts, sent_warn = validation_limits(backend)
         chunks_to_process = validate_and_collect(
@@ -116,7 +119,7 @@ def run_highlight_pipeline(
 
         if fmt == "epub":
             return build_highlight_epub(request, aligned_chunks, tracker, reporter=reporter)
-        return build_highlight_mp4(request, aligned_chunks, reporter=reporter)
+        return build_highlight_mp4(request, aligned_chunks, pdf_words=pdf_words, reporter=reporter)
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return PipelineRunResult(exit_code=1, error_message=str(exc))
@@ -163,10 +166,10 @@ def build_highlight_mp4(
     request: HighlightPipelineRequest,
     aligned_chunks,
     *,
+    pdf_words=None,
     reporter: Optional[PipelineReporter] = None,
 ) -> PipelineRunResult:
     """Render the MP4 highlighted-text output."""
-    from ..highlight_renderer import HighlightRenderer
     from ..video_composer import compose_highlight_video
 
     reporter = get_reporter(reporter)
@@ -174,15 +177,32 @@ def build_highlight_mp4(
     request.output = output_name
     width, height = parse_resolution(request.resolution)
 
-    reporter.phase_start("rendering", "\n=== RENDERING VIDEO ===")
-    renderer = HighlightRenderer(
-        width=width,
-        height=height,
-        font_size=request.font_size,
-        highlight_color=DEFAULT_HIGHLIGHT_COLOR,
-        text_color=DEFAULT_TEXT_COLOR,
-        bg_color=DEFAULT_BG_COLOR,
-    )
+    # Use PageRenderer for PDF inputs when word bboxes are available
+    if pdf_words:
+        from ..page_renderer import PageRenderer
+        from ..word_matcher import match_words_to_bboxes
+
+        reporter.phase_start("matching", "\n=== MATCHING WORDS TO PAGE POSITIONS ===")
+        match_words_to_bboxes(aligned_chunks, pdf_words)
+
+        reporter.phase_start("rendering", "\n=== RENDERING VIDEO (page images) ===")
+        renderer = PageRenderer(
+            pdf_path=request.pdf,
+            width=width,
+            height=height,
+        )
+    else:
+        from ..highlight_renderer import HighlightRenderer
+
+        reporter.phase_start("rendering", "\n=== RENDERING VIDEO ===")
+        renderer = HighlightRenderer(
+            width=width,
+            height=height,
+            font_size=request.font_size,
+            highlight_color=DEFAULT_HIGHLIGHT_COLOR,
+            text_color=DEFAULT_TEXT_COLOR,
+            bg_color=DEFAULT_BG_COLOR,
+        )
 
     dest = os.path.join(request.output_dir, output_name)
     compose_highlight_video(

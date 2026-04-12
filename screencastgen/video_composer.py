@@ -41,8 +41,7 @@ def compose_highlight_video(
 
     for ac in aligned_chunks:
         duration = _get_audio_duration(ac.audio_path)
-        word_texts = [w.word for w in ac.words]
-        layout = renderer.layout_words(word_texts)
+        layout = renderer.layout_words(ac.words)
 
         def make_frame(t, _ac=ac, _layout=layout):
             active_idx = renderer.get_active_word_index(_ac.words, t)
@@ -102,7 +101,6 @@ def compose_lipsync_video(
 
     for ac, lipsync_path in zip(aligned_chunks, lipsync_clips):
         duration = _get_audio_duration(ac.audio_path)
-        word_texts = [w.word for w in ac.words]
 
         if face_position in overlay_positions:
             text_w = frame_w
@@ -118,7 +116,7 @@ def compose_lipsync_video(
         # Adjust renderer width for text area
         orig_width = renderer.width
         renderer.width = text_renderer_width
-        layout = renderer.layout_words(word_texts)
+        layout = renderer.layout_words(ac.words)
         renderer.width = orig_width
 
         def make_text_frame(t, _ac=ac, _layout=layout, _tw=text_renderer_width):
@@ -170,8 +168,13 @@ def compose_lipsync_video(
             text_clip = text_clip.with_position((0, 0))
             face_clip = face_clip.with_position((x, y))
 
+        if face_position in overlay_positions:
+            layers = [text_clip, face_clip]
+        else:
+            layers = [face_clip, text_clip]
+
         composite = CompositeVideoClip(
-            [face_clip, text_clip],
+            layers,
             size=(frame_w, frame_h),
         ).with_duration(duration)
 

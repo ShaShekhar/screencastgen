@@ -4,10 +4,13 @@ Supports:
   * ``.pdf``  – via PyPDF2
   * ``.txt``  – plain UTF-8 text
   * ``.epub`` – via the ``ebooklib`` package (optional dependency)
+
+PyMuPDF (fitz) functions are deferred-imported and only used for the
+page-image rendering pipeline (word bounding boxes + page rasterisation).
 """
 
 import os
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import PyPDF2
 
@@ -89,3 +92,89 @@ def extract_text_by_page(path: str) -> List[Tuple[int, str]]:
     raise ValueError(
         f"Unsupported file extension '{ext}'. Supported: .pdf, .txt, .epub"
     )
+
+
+# ---------------------------------------------------------------------------
+# PyMuPDF-based extraction (deferred import)
+# ---------------------------------------------------------------------------
+
+def extract_words_with_bboxes(path: str) -> List["PDFWordInfo"]:
+    """Extract every word from *path* with its bounding box using PyMuPDF.
+
+    Returns a flat list in reading order.  Each entry carries the word text,
+    its bounding box in PDF points, and the 1-indexed page number.
+    """
+    import fitz  # pymupdf
+
+    from .types import BBox, PDFWordInfo
+
+    doc = fitz.open(path)
+    result: List[PDFWordInfo] = []
+    for page_idx in range(len(doc)):
+        page = doc[page_idx]
+        page_num = page_idx + 1
+        # ``sort=True`` keeps extraction in visual reading order, which the
+        # bbox matcher relies on when walking aligned words sequentially.
+        # get_text("words") returns (x0, y0, x1, y1, word, block, line, word_no)
+        for entry in page.get_text("words", sort=True):
+            x0, y0, x1, y1, word_text = entry[0], entry[1], entry[2], entry[3], entry[4]
+            word_text = word_text.strip()
+            if not word_text:
+                continue
+            result.append(
+                PDFWordInfo(
+                    word=word_text,
+                    bbox=BBox(x0=x0, y0=y0, x1=x1, y1=y1, page=page_num),
+                    page=page_num,
+                )
+            )
+    doc.close()
+    return result
+
+
+def render_page_image_with_zoom(
+    path: str,
+    page_num: int,
+    target_width: Optional[int] = None,
+) -> Tuple["Image.Image", float]:
+    """Rasterise a single PDF page to a Pillow RGB image.
+
+    *page_num* is 1-indexed.  If *target_width* is given the page is scaled
+    proportionally to that width; otherwise the native resolution is used.
+    """
+    import fitz  # pymupdf
+    from PIL import Image
+
+    doc = fitz.open(path)
+    page = doc[page_num - 1]
+
+    if target_width:
+        zoom = target_width / page.rect.width
+    else:
+        zoom = 1.0
+
+    mat = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=mat, alpha=False)
+    img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    doc.close()
+    return img, zoom
+
+
+def render_page_image(
+    path: str,
+    page_num: int,
+    target_width: Optional[int] = None,
+) -> "Image.Image":
+    """Backward-compatible wrapper for page rasterisation."""
+    img, _zoom = render_page_image_with_zoom(path, page_num, target_width=target_width)
+    return img
+
+
+def get_page_count(path: str) -> int:
+    """Return the number of pages in a PDF."""
+    import fitz  # pymupdf
+
+    doc = fitz.open(path)
+    count = len(doc)
+    doc.close()
+    return count

@@ -77,12 +77,17 @@ class HighlightRenderer:
         bbox = self.font.getbbox("Ag")
         return int((bbox[3] - bbox[1]) * 1.5)
 
-    def layout_words(self, words: List[str]) -> List[dict]:
+    def layout_words(self, words) -> List[dict]:
         """Compute pixel positions for each word.
 
+        Accepts ``List[str]`` or ``List[WordTiming]`` (extracts ``.word``).
         Returns list of dicts: {word, index, x, y, width, line}.
         """
-        lines = self._word_wrap(words)
+        if words and hasattr(words[0], "word"):
+            word_strings = [w.word for w in words]
+        else:
+            word_strings = list(words)
+        lines = self._word_wrap(word_strings)
         line_height = self._get_line_height()
         space_width = self.font.getlength(" ")
 

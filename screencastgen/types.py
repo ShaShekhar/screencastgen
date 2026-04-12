@@ -1,7 +1,27 @@
 """Shared data types for screencastgen."""
 
 from dataclasses import dataclass, field
-from typing import List, Protocol
+from typing import List, Optional, Protocol
+
+
+@dataclass
+class BBox:
+    """A bounding box in PDF points (origin top-left)."""
+
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    page: int  # 1-indexed PDF page number
+
+
+@dataclass
+class PDFWordInfo:
+    """A word extracted from a PDF with its position."""
+
+    word: str
+    bbox: BBox
+    page: int  # 1-indexed
 
 
 @dataclass
@@ -12,6 +32,7 @@ class WordTiming:
     start: float  # seconds from start of chunk audio
     end: float  # seconds from start of chunk audio
     page: int = 0  # source PDF page (1-indexed), 0 = unknown
+    bbox: Optional[BBox] = None  # PDF word bounding box, if available
 
 
 @dataclass

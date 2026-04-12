@@ -29,6 +29,7 @@ highlight = [
     "moviepy>=2.0",
     "Pillow>=10.0",
     "torch>=2.0",
+    "pymupdf>=1.24",
 ]
 lipsync = [
     "pydub>=0.25",
@@ -36,6 +37,7 @@ lipsync = [
     "moviepy>=2.0",
     "Pillow>=10.0",
     "torch>=2.0",
+    "pymupdf>=1.24",
     "f5-tts>=1.0",
 ]
 server = [
