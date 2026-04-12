@@ -13,10 +13,10 @@ pip install -e .
 # Qwen3-TTS (local, requires GPU)
 pip install -e ".[qwen]"
 
-# Highlighted-text video (+ WhisperX, moviepy)
+# Highlighted-text video / PDF page highlighting (+ WhisperX, moviepy, PyMuPDF)
 pip install -e ".[highlight]"
 
-# Lip-sync video (+ F5-TTS, LatentSync)
+# Lip-sync video (+ F5-TTS, LatentSync, PDF page highlighting)
 pip install -e ".[lipsync]"
 
 # GPU inference server (for CPU/GPU VM split)
@@ -131,7 +131,7 @@ screencastgen audio MyBook.pdf --backend qwen --device cuda
 
 ### Highlight (`screencastgen highlight`)
 
-PDF to highlighted-text video with synchronized audio.
+PDF to synchronized video with word highlighting. For PDF inputs, the preferred path highlights words on the actual PDF page images using PyMuPDF word bounding boxes. For non-PDF inputs, or if PyMuPDF is unavailable, it falls back to a plain text-on-background renderer.
 
 ```bash
 pip install -e ".[highlight]"
@@ -141,7 +141,7 @@ screencastgen highlight MyBook.pdf -o output.mp4 --aligner whisperx
 
 ### Lip-sync (`screencastgen lipsync`)
 
-PDF to talking-head video with voice cloning and lip synchronization.
+PDF to talking-head video with voice cloning and lip synchronization. For PDF inputs, the highlighted content is rendered from actual PDF page images using matched word bounding boxes before the face video is composited. Non-PDF inputs fall back to the plain text renderer.
 
 ```bash
 pip install -e ".[lipsync]"
@@ -233,7 +233,9 @@ Model download options:
 
 For highlight/lipsync pipelines, additional steps run after synthesis:
 - **Align** audio with the selected alignment provider for word-level timestamps
-- **Render** highlighted text video or lip-synced talking-head video with the selected provider
+- **PDF inputs**: extract PyMuPDF word bounding boxes, match aligned words back to page positions, and render highlighted PDF page images
+- **Other inputs / fallback**: render highlighted text on a plain background
+- **Lip-sync**: composite the highlighted content with the selected face animation provider
 
 The remote GPU path preserves the same abstraction: the CPU-side client sends provider names to the server, and the server executes its configured default provider or an explicit per-request override.
 
@@ -289,13 +291,15 @@ screencastgen/
       base.py             LipsyncProviderSpec dataclass
       latentsync_provider.py  LatentSync implementation
       wav2lip_provider.py     Wav2Lip implementation
-  extractor.py            PDF text extraction (PyPDF2)
+  extractor.py            PDF/TXT/EPUB text extraction + PyMuPDF bbox/page-image helpers
   text_processing.py      Preprocess, sentence split, chunking (byte-based)
   tracker.py              ProcessingTracker — resumable state (JSON)
   concatenator.py         Audio/video merge (pydub / ffmpeg fallback)
   aligner.py              Thin facade over providers/align
   lipsync.py              Thin facade over providers/lipsync
-  highlight_renderer.py   Word-highlighted video frame renderer (moviepy/Pillow)
+  highlight_renderer.py   Plain-text fallback video frame renderer (Pillow)
+  page_renderer.py        PDF page-image renderer using matched word bounding boxes
+  word_matcher.py         Sequential matcher from aligned words to PDF word positions
   video_composer.py       Video composition (highlight + lipsync)
   epub_builder.py         EPUB3 output with embedded audio/video + SMIL overlays
   inference_server.py     FastAPI GPU inference server
@@ -314,8 +318,8 @@ pyproject.toml            Package metadata and entry points
 | Core            | PyPDF2                                          |
 | Qwen3 TTS      | qwen-tts, torch, soundfile                      |
 | Concatenation   | pydub (preferred) or ffmpeg CLI                 |
-| Highlight video | alignment provider deps (currently whisperx), moviepy, Pillow, torch |
-| Lip-sync video  | f5-tts, lip-sync provider deps (currently [LatentSync](https://github.com/bytedance/LatentSync) in a separate env, or Wav2Lip), ffmpeg/ffprobe |
+| Highlight video | alignment provider deps (currently whisperx), moviepy, Pillow, torch, pymupdf |
+| Lip-sync video  | f5-tts, alignment provider deps, moviepy, Pillow, torch, pymupdf, lip-sync provider deps (currently [LatentSync](https://github.com/bytedance/LatentSync) in a separate env, or Wav2Lip), ffmpeg/ffprobe |
 | GPU server      | fastapi, uvicorn, python-multipart              |
 | Web app         | fastapi, sqlalchemy, celery, redis, asyncpg     |
 | Web frontend    | react, react-router-dom, axios, tailwindcss     |
