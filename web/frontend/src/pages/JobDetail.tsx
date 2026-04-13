@@ -14,7 +14,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 const PIPELINE_LABELS: Record<string, string> = {
   audio: "Audio",
-  highlight: "Highlight Video",
+  highlight: "Highlight Text Audio",
   lipsync: "Lip-Sync Video",
 };
 

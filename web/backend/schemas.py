@@ -26,6 +26,10 @@ class AudioConfig(BaseModel):
 
 
 class HighlightConfig(AudioConfig):
+    # Output format: "epub" = EPUB3 with Media Overlays (audio + word sync),
+    # "mp4" = rendered video with page images and highlighted text.
+    format: str = "epub"
+
     # Voice selection: either a bundled voice id or an uploaded reference
     # audio file id. Both are optional — when neither is set, the GPU
     # server's default voice is used.
@@ -44,6 +48,8 @@ class HighlightConfig(AudioConfig):
             raise ValueError(
                 "Provide either voice_id (bundled) or ref_audio_file_id (uploaded), not both"
             )
+        if self.format not in ("epub", "mp4"):
+            raise ValueError("format must be 'epub' or 'mp4'")
         return self
 
 

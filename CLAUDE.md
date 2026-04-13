@@ -19,6 +19,8 @@ pip install -e ".[qwen]"           # + Qwen3-TTS, torch, soundfile
 pip install -e ".[highlight]"       # + WhisperX, moviepy, Pillow, torch
 pip install -e ".[lipsync]"         # + F5-TTS
 pip install -e ".[server]"          # GPU inference server (all ML deps + FastAPI)
+pip install -e ".[gcs]"            # + Google Cloud Storage backend
+pip install -e ".[s3]"             # + Amazon S3 backend
 pip install -e ".[all]"             # everything
 
 # Run (local GPU)
@@ -69,6 +71,8 @@ The shared pipeline (steps 1–5 in `cli.py`) is: extract → preprocess → spl
 | GPU server      | fastapi, uvicorn, python-multipart              |
 | Web app         | fastapi, sqlalchemy, celery, redis, asyncpg      |
 | Web frontend    | react, react-router-dom, axios, tailwindcss       |
+| GCS storage     | google-cloud-storage (optional)                  |
+| S3 storage      | boto3 (optional)                                 |
 
 ## Web Application (`web/`)
 
@@ -99,7 +103,8 @@ make frontend                # vite dev server on :5173
 ### Web Architecture
 
 - **Backend** (`web/backend/`): FastAPI app with async SQLAlchemy (PostgreSQL). Routers: `uploads.py` (file upload), `jobs.py` (CRUD + download), `events.py` (SSE progress stream).
-- **Celery tasks** (`web/backend/tasks/`): `pipelines.py` constructs `argparse.Namespace` objects and calls the existing `run_audio_pipeline()` / `run_highlight_pipeline()` / `run_lipsync_pipeline()` from `screencastgen.cli`. A `ProgressBridge` intercepts `sys.stdout` to parse progress lines and update the DB + Redis pubsub. Default backend is `remote` — the worker calls the GPU inference server.
+- **Celery tasks** (`web/backend/tasks/`): `pipelines.py` constructs `argparse.Namespace` objects and calls the existing `run_audio_pipeline()` / `run_highlight_pipeline()` / `run_lipsync_pipeline()` from `screencastgen.cli`. A `ProgressBridge` intercepts `sys.stdout` to parse progress lines and update the DB + Redis pubsub. Default backend is `remote` — the worker calls the GPU inference server. After pipeline success, `upload_output()` pushes the result to remote storage (no-op for local).
 - **Frontend** (`web/frontend/`): React + Tailwind SPA. Pages: Dashboard (job list), NewJob (upload + config), JobDetail (live progress via SSE + download). Vite proxies `/api` to the backend in dev.
 - **Database**: Two tables — `uploaded_files` and `jobs`. Job config is stored as JSONB. Each job gets an isolated output dir (`outputs/{job_id}/`) with its own `ProcessingTracker` JSON file for resumability.
 - **Real-time progress**: SSE via `sse-starlette`. Backend publishes to Redis pubsub channel `job:{id}:progress`; the SSE endpoint subscribes and streams events to the browser.
+- **Storage backends**: `StorageBackend` ABC in `web/backend/services/storage_backend.py` with local (default), GCS, and S3 implementations. Configured via `P2A_STORAGE_BACKEND` env var. Pipelines always work locally; remote backends handle upload/download to/from buckets. Cloud deps (`google-cloud-storage`, `boto3`) are deferred imports.

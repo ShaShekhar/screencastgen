@@ -43,17 +43,18 @@ export interface AudioConfig {
   language: string;
   backend?: string;
   tts_server_url?: string;
-  aligner?: string;
 }
 
+export type HighlightFormat = "epub" | "mp4";
+
 export interface HighlightConfig extends AudioConfig {
+  format: HighlightFormat;
   voice_id?: string | null;
   ref_audio_file_id?: string | null;
   ref_text?: string | null;
-  font_size: number;
+  // Only used when format === "mp4". Output resolution in pixels.
   width: number;
   height: number;
-  fps: number;
 }
 
 export interface BundledVoice {
@@ -75,7 +76,6 @@ export interface LipsyncConfig {
   ref_video_file_id: string;
   ref_text?: string;
   backend?: string;
-  aligner?: string;
   lipsync_provider?: string;
   device: string;
   tts_server_url?: string;

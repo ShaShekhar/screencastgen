@@ -22,6 +22,10 @@ pip install -e ".[lipsync]"
 # GPU inference server (for CPU/GPU VM split)
 pip install -e ".[server]"
 
+# Cloud storage backends (optional, for web app)
+pip install -e ".[gcs]"             # Google Cloud Storage
+pip install -e ".[s3]"              # Amazon S3
+
 # Everything
 pip install -e ".[all]"
 ```
@@ -251,10 +255,18 @@ docker compose up --build    # starts postgres, redis, backend, worker, frontend
 # Frontend: http://localhost:5173  |  API: http://localhost:8000
 ```
 
-Configure the GPU server URL in `.env`:
+Configure the GPU server URL and storage backend in `.env`:
 ```
 P2A_TTS_SERVER_URL=http://gpu-vm:8100
+
+# Storage backend: local (default), gcs, or s3
+P2A_STORAGE_BACKEND=local
+# P2A_STORAGE_BUCKET=my-bucket
+# P2A_STORAGE_PREFIX=screencastgen
+# P2A_STORAGE_REGION=us-east-1          # S3 only
 ```
+
+By default files are stored on the local filesystem. Set `P2A_STORAGE_BACKEND` to `gcs` or `s3` to store uploads and outputs in a cloud bucket. Pipelines always work against local directories; the storage layer handles downloading inputs and uploading outputs to the bucket.
 
 See [CLAUDE.md](CLAUDE.md) for local dev setup and architecture details.
 
@@ -323,3 +335,5 @@ pyproject.toml            Package metadata and entry points
 | GPU server      | fastapi, uvicorn, python-multipart              |
 | Web app         | fastapi, sqlalchemy, celery, redis, asyncpg     |
 | Web frontend    | react, react-router-dom, axios, tailwindcss     |
+| GCS storage     | google-cloud-storage (optional)                  |
+| S3 storage      | boto3 (optional)                                 |

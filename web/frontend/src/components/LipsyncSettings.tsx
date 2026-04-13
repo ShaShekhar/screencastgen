@@ -16,9 +16,6 @@ const FACE_POSITIONS = [
   { value: "right", label: "Split Right" },
   { value: "center", label: "Top Center" },
 ];
-const ALIGNERS = [
-  { value: "whisperx", label: "WhisperX" },
-];
 const LIPSYNC_PROVIDERS = [
   { value: "auto", label: "Auto" },
   { value: "latentsync", label: "LatentSync" },
@@ -146,23 +143,6 @@ export default function LipsyncSettings({ config, onChange }: Props) {
         <p className="mt-1 text-xs text-gray-500">
           {Math.round(config.face_scale * 100)}% of frame width for corner overlays.
         </p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Aligner
-        </label>
-        <select
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          value={config.aligner || "whisperx"}
-          onChange={(e) => onChange({ ...config, aligner: e.target.value })}
-        >
-          {ALIGNERS.map((aligner) => (
-            <option key={aligner.value} value={aligner.value}>
-              {aligner.label}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div>

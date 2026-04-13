@@ -1,20 +1,20 @@
 {
   "voices": [
     {
-      "id": "narrator-en-male",
-      "name": "Aiden (English, Male)",
+      "id": "chirp3-hd-algenib",
+      "name": "Algenib (English)",
       "language": "en-US",
-      "description": "Calm narrator voice, suitable for non-fiction audiobooks.",
-      "file": "narrator-en-male.wav",
-      "ref_text": "The quick brown fox jumps over the lazy dog. This is a sample of a calm narrator voice."
+      "description": "Bundled Chirp HD reference sample from the Algenib clip.",
+      "file": "chirp3-hd-algenib.wav",
+      "ref_text": ""
     },
     {
-      "id": "narrator-en-female",
-      "name": "Iris (English, Female)",
+      "id": "chirp3-hd-despina",
+      "name": "Despina (English)",
       "language": "en-US",
-      "description": "Warm female narrator, well suited to fiction and storytelling.",
-      "file": "narrator-en-female.wav",
-      "ref_text": "Once upon a time, in a quiet village beside a winding river, a curious story began to unfold."
+      "description": "Bundled Chirp HD reference sample from the Despina clip.",
+      "file": "chirp3-hd-despina.wav",
+      "ref_text": ""
     }
   ]
 }

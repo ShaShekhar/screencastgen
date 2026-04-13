@@ -17,10 +17,7 @@ import FileUploader from "./FileUploader";
 interface Props {
   config: HighlightConfig | AudioConfig;
   onChange: (c: Partial<HighlightConfig>) => void;
-  showAligner?: boolean;
 }
-
-const ALIGNERS = [{ value: "whisperx", label: "WhisperX" }];
 
 const FALLBACK_LANGUAGES: LanguageOption[] = [
   { code: "en-US", name: "English (US)" },
@@ -28,7 +25,7 @@ const FALLBACK_LANGUAGES: LanguageOption[] = [
 
 type VoiceSource = "bundled" | "upload";
 
-export default function VoiceSettings({ config, onChange, showAligner = false }: Props) {
+export default function VoiceSettings({ config, onChange }: Props) {
   const highlightCfg = config as HighlightConfig;
 
   const [voices, setVoices] = useState<BundledVoice[]>([]);
@@ -306,25 +303,6 @@ export default function VoiceSettings({ config, onChange, showAligner = false }:
           <audio controls src={previewUrl} className="mt-2 w-full" />
         )}
       </div>
-
-      {showAligner && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Aligner
-          </label>
-          <select
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            value={config.aligner || "whisperx"}
-            onChange={(e) => onChange({ aligner: e.target.value })}
-          >
-            {ALIGNERS.map((aligner) => (
-              <option key={aligner.value} value={aligner.value}>
-                {aligner.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
     </div>
   );
 }

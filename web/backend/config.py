@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     TTS_SERVER_URL: str = "http://localhost:8100"
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173"]
 
+    # Storage backend: "local" (default), "gcs", or "s3"
+    STORAGE_BACKEND: str = "local"
+    STORAGE_BUCKET: str = ""
+    STORAGE_PREFIX: str = ""
+    STORAGE_REGION: str = ""  # S3 region (e.g. us-east-1)
+    STORAGE_LOCAL_CACHE_DIR: str = "/tmp/screencastgen_cache"
+
     model_config = {"env_prefix": "P2A_", "env_file": ".env", "extra": "ignore"}
 
 

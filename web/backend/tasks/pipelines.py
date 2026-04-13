@@ -34,7 +34,7 @@ from .progress import JobProgressReporter
 from ..config import settings
 from ..database import get_sync_session
 from ..models import Job, JobStatus, UploadedFile
-from ..services.storage import get_upload_abs_path, get_output_dir
+from ..services.storage import get_upload_abs_path, get_output_dir, upload_output
 
 logger = logging.getLogger(__name__)
 
@@ -105,14 +105,19 @@ def _build_highlight_request(
     db_session,
 ) -> HighlightPipelineRequest:
     cfg = job.config_json or {}
-    output_filename = os.path.splitext(os.path.basename(pdf_path))[0] + "_highlight.mp4"
+    fmt = cfg.get("format", "epub")
+    if fmt not in ("epub", "mp4"):
+        fmt = "epub"
+    output_filename = (
+        os.path.splitext(os.path.basename(pdf_path))[0] + f"_highlight.{fmt}"
+    )
 
     ref_audio_path, ref_text = _resolve_highlight_voice(cfg, job, db_session)
 
     return HighlightPipelineRequest(
         pdf=pdf_path,
         output=output_filename,
-        format="mp4",
+        format=fmt,
         output_dir=output_dir,
         backend=cfg.get("backend", "remote"),
         voice=cfg.get("voice"),
@@ -232,6 +237,7 @@ def run_pipeline_task(self, job_id: str):
         try:
             result = pipeline_func(request, reporter=reporter)
             if result.exit_code == 0 and result.output_path and os.path.isfile(result.output_path):
+                upload_output(uuid.UUID(job_id), result.output_name)
                 job.status = JobStatus.completed
                 job.progress_phase = "done"
                 job.error_message = None

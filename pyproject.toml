@@ -46,6 +46,8 @@ server = [
     "python-multipart>=0.0.6",
     "screencastgen[qwen,highlight,lipsync]",
 ]
+gcs = ["google-cloud-storage>=2.0"]
+s3 = ["boto3>=1.26"]
 all = ["screencastgen[highlight,lipsync,qwen,server]"]
 
 [tool.setuptools.packages.find]

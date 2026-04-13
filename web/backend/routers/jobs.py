@@ -1,16 +1,14 @@
 """Job CRUD and download endpoints."""
 
-import os
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 
 from ..database import async_session_factory
 from ..models import Job, JobStatus, PipelineType, UploadedFile
 from ..schemas import JobCreateRequest, JobListResponse, JobResponse
-from ..services.storage import delete_job_files, get_output_abs_path
+from ..services.storage import delete_job_files, get_download_response
 
 router = APIRouter(tags=["jobs"])
 
@@ -142,10 +140,8 @@ async def download_job(job_id: UUID):
             raise HTTPException(400, "Job output not available")
 
         try:
-            abs_path = get_output_abs_path(job_id, job.output_path)
+            return get_download_response(job_id, job.output_path)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
-        if not os.path.isfile(abs_path):
-            raise HTTPException(404, "Output file not found on disk")
-
-        return FileResponse(abs_path, filename=os.path.basename(abs_path))
+        except FileNotFoundError:
+            raise HTTPException(404, "Output file not found")
