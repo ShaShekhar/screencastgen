@@ -2,19 +2,19 @@
   "voices": [
     {
       "id": "chirp3-hd-algenib",
-      "name": "Algenib (English)",
+      "name": "Algenib (English, Male)",
       "language": "en-US",
-      "description": "Bundled Chirp HD reference sample from the Algenib clip.",
+      "description": "Bundled Chirp HD reference sample — male English voice.",
       "file": "chirp3-hd-algenib.wav",
-      "ref_text": ""
+      "ref_text": "Hi there! We're introducing a new feature where I can read ideas and topics aloud with a natural, human-like voice. Before you get started, please take a moment to go over this important information."
     },
     {
       "id": "chirp3-hd-despina",
-      "name": "Despina (English)",
+      "name": "Despina (English, Female)",
       "language": "en-US",
-      "description": "Bundled Chirp HD reference sample from the Despina clip.",
+      "description": "Bundled Chirp HD reference sample — female English voice.",
       "file": "chirp3-hd-despina.wav",
-      "ref_text": ""
+      "ref_text": "Hi there! We're introducing a new feature where I can read ideas and topics aloud with a natural, human-like voice. Before you get started, please take a moment to go over this important information."
     }
   ]
 }

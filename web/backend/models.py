@@ -34,6 +34,7 @@ class UploadedFile(Base):
     stored_path: Mapped[str] = mapped_column(String(1024))
     size_bytes: Mapped[int] = mapped_column(Integer)
     content_type: Mapped[str] = mapped_column(String(128))
+    ref_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 

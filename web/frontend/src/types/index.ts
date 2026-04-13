@@ -3,6 +3,7 @@ export interface UploadedFile {
   original_name: string;
   size_bytes: number;
   content_type: string;
+  ref_text?: string | null;
 }
 
 export type PipelineType = "audio" | "highlight" | "lipsync";

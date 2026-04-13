@@ -14,6 +14,7 @@ Then uses ``--backend remote`` in the CLI or web app.
 Endpoints
 ---------
 POST /synthesize   — Text → audio (WAV/MP3)
+POST /transcribe   — Audio → plain text (WhisperX)
 POST /align        — Audio + text → word-level timestamps (JSON)
 POST /lipsync      — Audio + reference video → lip-synced video
 GET  /health       — Readiness and backend info
@@ -64,7 +65,7 @@ def _create_app():
             "device": _device,
             "aligner": _aligner_name,
             "lipsync_provider": _lipsync_provider_name,
-            "capabilities": ["synthesize", "align", "lipsync"],
+            "capabilities": ["synthesize", "transcribe", "align", "lipsync"],
         }
 
     # ------------------------------------------------------------------
@@ -195,6 +196,37 @@ def _create_app():
             ref_text=ref_text,
         )
         return Response(content=audio_bytes, media_type=_media_type_for(_backend.output_format))
+
+    # ------------------------------------------------------------------
+    # Transcription (audio → text)
+    # ------------------------------------------------------------------
+
+    @app.post("/transcribe")
+    async def transcribe(
+        audio: UploadFile = File(...),
+        language: str = Form("en-US"),
+    ):
+        """Transcribe *audio* and return the plain text.
+
+        Used by the web backend to auto-fill ``ref_text`` for
+        voice-cloning reference clips so Qwen3-TTS can run in ICL mode.
+        """
+        from .transcription import transcribe_audio
+
+        suffix = os.path.splitext(audio.filename or "audio.wav")[1] or ".wav"
+        fd, tmp_audio = tempfile.mkstemp(suffix=suffix)
+        os.close(fd)
+
+        try:
+            content = await audio.read()
+            with open(tmp_audio, "wb") as f:
+                f.write(content)
+
+            text = transcribe_audio(tmp_audio, language=language, device=_device)
+            return {"text": text}
+        finally:
+            if os.path.exists(tmp_audio):
+                os.unlink(tmp_audio)
 
     # ------------------------------------------------------------------
     # Alignment

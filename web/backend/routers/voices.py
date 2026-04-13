@@ -115,7 +115,7 @@ async def _resolve_ref_audio(req: PreviewRequest) -> tuple[Optional[str], Option
             uploaded = await session.get(UploadedFile, req.ref_audio_file_id)
             if not uploaded:
                 raise HTTPException(404, "Uploaded reference audio not found")
-        return get_upload_abs_path(uploaded.stored_path), req.ref_text
+        return get_upload_abs_path(uploaded.stored_path), req.ref_text or uploaded.ref_text
 
     return None, req.ref_text
 

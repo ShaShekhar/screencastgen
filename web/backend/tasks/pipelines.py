@@ -93,7 +93,10 @@ def _resolve_highlight_voice(
         if ref_uuid:
             uploaded = db_session.get(UploadedFile, ref_uuid)
             if uploaded:
-                return get_upload_abs_path(uploaded.stored_path), cfg.get("ref_text")
+                return (
+                    get_upload_abs_path(uploaded.stored_path),
+                    cfg.get("ref_text") or uploaded.ref_text,
+                )
 
     return None, cfg.get("ref_text")
 

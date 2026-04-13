@@ -82,11 +82,13 @@ class QwenTTS:
         import soundfile as sf
 
         if self.ref_audio_path:
+            ref_text = (self.ref_text or "").strip()
             wavs, sr = self._model.generate_voice_clone(
                 text=text,
                 language=self._language,
                 ref_audio=self.ref_audio_path,
-                ref_text=self.ref_text or "",
+                ref_text=ref_text,
+                x_vector_only_mode=not ref_text,
             )
         else:
             wavs, sr = self._model.generate_custom_voice(

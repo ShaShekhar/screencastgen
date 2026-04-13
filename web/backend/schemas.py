@@ -89,6 +89,7 @@ class UploadResponse(BaseModel):
     original_name: str
     size_bytes: int
     content_type: str
+    ref_text: Optional[str] = None
 
 
 class JobResponse(BaseModel):
