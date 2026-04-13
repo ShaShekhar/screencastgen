@@ -21,6 +21,7 @@ export interface PreviewParams {
   voice_id?: string;
   ref_audio_file_id?: string;
   ref_text?: string;
+  uploaded_file_id?: string;
 }
 
 /** Returns a Blob URL of the synthesized preview audio. The caller is

@@ -170,6 +170,7 @@ export default function NewJob() {
                 onChange={(c) =>
                   setHighlightConfig({ ...highlightConfig, ...c })
                 }
+                uploadedFileId={uploadedFile?.id}
               />
               {highlightConfig.format === "mp4" && (
                 <>

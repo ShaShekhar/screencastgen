@@ -97,7 +97,34 @@ class PreviewRequest(BaseModel):
     voice_id: Optional[str] = None
     ref_audio_file_id: Optional[UUID] = None
     ref_text: Optional[str] = None
+    # When set, the preview text is drawn from the user's uploaded
+    # document instead of the generic DEFAULT_PREVIEW_TEXT — gives a
+    # more representative sample of how the chosen voice will read
+    # the actual content.
+    uploaded_file_id: Optional[UUID] = None
     model_config = {"extra": "forbid"}
+
+
+PREVIEW_MIN_CHARS = 200
+PREVIEW_MAX_CHARS = 400
+
+
+def _snippet_from_document(text: str) -> Optional[str]:
+    """Return a ~200-char preview snippet, extending to a sentence end."""
+    cleaned = " ".join((text or "").split())
+    if not cleaned:
+        return None
+    if len(cleaned) <= PREVIEW_MIN_CHARS:
+        return cleaned
+
+    end = PREVIEW_MIN_CHARS
+    for i in range(PREVIEW_MIN_CHARS, min(len(cleaned), PREVIEW_MAX_CHARS)):
+        if cleaned[i] in ".!?":
+            end = i + 1
+            break
+    else:
+        end = min(len(cleaned), PREVIEW_MAX_CHARS)
+    return cleaned[:end].strip()
 
 
 async def _resolve_ref_audio(req: PreviewRequest) -> tuple[Optional[str], Optional[str]]:
@@ -196,9 +223,24 @@ async def voice_preview(req: PreviewRequest):
     page so users can listen before committing to a full document.
     """
     ref_audio_path, ref_text = await _resolve_ref_audio(req)
-    text = (req.text or DEFAULT_PREVIEW_TEXT).strip()
+
+    text = (req.text or "").strip()
+    if not text and req.uploaded_file_id:
+        async with async_session_factory() as session:
+            uploaded = await session.get(UploadedFile, req.uploaded_file_id)
+        if uploaded:
+            try:
+                from screencastgen.extractor import extract_text
+
+                doc_text = extract_text(get_upload_abs_path(uploaded.stored_path))
+                snippet = _snippet_from_document(doc_text)
+                if snippet:
+                    text = snippet
+            except Exception:  # noqa: BLE001
+                logger.exception("Could not extract preview snippet from document")
+
     if not text:
-        raise HTTPException(400, "Preview text must not be empty")
+        text = DEFAULT_PREVIEW_TEXT
 
     server_url = settings.TTS_SERVER_URL
     try:

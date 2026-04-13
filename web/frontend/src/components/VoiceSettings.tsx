@@ -17,6 +17,7 @@ import FileUploader from "./FileUploader";
 interface Props {
   config: HighlightConfig | AudioConfig;
   onChange: (c: Partial<HighlightConfig>) => void;
+  uploadedFileId?: string | null;
 }
 
 const FALLBACK_LANGUAGES: LanguageOption[] = [
@@ -25,7 +26,7 @@ const FALLBACK_LANGUAGES: LanguageOption[] = [
 
 type VoiceSource = "bundled" | "upload";
 
-export default function VoiceSettings({ config, onChange }: Props) {
+export default function VoiceSettings({ config, onChange, uploadedFileId }: Props) {
   const highlightCfg = config as HighlightConfig;
 
   const [voices, setVoices] = useState<BundledVoice[]>([]);
@@ -102,6 +103,7 @@ export default function VoiceSettings({ config, onChange }: Props) {
         ref_audio_file_id:
           voiceSource === "upload" ? highlightCfg.ref_audio_file_id || undefined : undefined,
         ref_text: highlightCfg.ref_text || undefined,
+        uploaded_file_id: uploadedFileId || undefined,
       });
       setPreview(url);
     } catch (e: unknown) {
