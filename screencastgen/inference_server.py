@@ -339,6 +339,9 @@ def _build_server_parser() -> argparse.ArgumentParser:
 def main(argv=None):
     global _backend, _batcher, _backend_name, _device, _aligner_name, _lipsync_provider_name
 
+    from .logging_config import setup_logging
+    setup_logging("inference_server")
+
     parser = _build_server_parser()
     args = parser.parse_args(argv)
 
