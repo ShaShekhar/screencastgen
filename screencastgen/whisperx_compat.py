@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import threading
 from contextlib import contextmanager
 from typing import Iterator
@@ -9,6 +10,29 @@ from typing import Iterator
 _PATCH_LOCK = threading.RLock()
 _PATCH_DEPTH = 0
 _ORIGINAL_TORCH_LOAD = None
+
+
+def resolve_whisperx_device(device: str) -> str:
+    """Resolve the device WhisperX should actually use.
+
+    WhisperX/pyannote can abort the process when CUDA is selected but the
+    cuDNN 8 runtime it expects is not installed. In that case we fall back
+    to CPU for WhisperX only so TTS or other GPU workloads can still use the
+    configured device.
+    """
+    if device != "cuda":
+        return device
+
+    try:
+        ctypes.CDLL("libcudnn_ops_infer.so.8")
+    except OSError as exc:
+        print(
+            "WARNING: WhisperX CUDA runtime unavailable "
+            f"({exc}). Falling back to CPU for WhisperX."
+        )
+        return "cpu"
+
+    return device
 
 
 @contextmanager
@@ -51,6 +75,7 @@ def load_whisperx_model(model_name: str, device: str, *, compute_type: str):
     """Load a WhisperX ASR model with PyTorch 2.6 compatibility enabled."""
     import whisperx
 
+    device = resolve_whisperx_device(device)
     with allow_unsafe_torch_load():
         return whisperx.load_model(model_name, device, compute_type=compute_type)
 
@@ -59,5 +84,6 @@ def load_whisperx_align_model(*, language_code: str, device: str):
     """Load a WhisperX alignment model with PyTorch 2.6 compatibility enabled."""
     import whisperx
 
+    device = resolve_whisperx_device(device)
     with allow_unsafe_torch_load():
         return whisperx.load_align_model(language_code=language_code, device=device)

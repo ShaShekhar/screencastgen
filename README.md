@@ -108,6 +108,40 @@ The inference server exposes these endpoints:
 
 `GET /health` also reports the loaded TTS backend plus the server defaults for `aligner` and `lipsync_provider`.
 
+### WhisperX on GPU VMs
+
+WhisperX can fail on GPU VMs when the Python environment has PyTorch/CUDA installed, but the dynamic loader cannot find the cuDNN runtime expected by WhisperX or one of its native dependencies. A common error looks like:
+
+```text
+Could not load library libcudnn_ops_infer.so.8
+```
+
+This means the process can see CUDA, but the required cuDNN 8 library is missing from the runtime search path. On GCP GPU VMs this often happens when the VM image has cuDNN 9 installed globally while the WhisperX stack still expects cuDNN 8.
+
+To diagnose the issue in the active virtual environment:
+
+```bash
+ldconfig -p | grep cudnn
+find "$VIRTUAL_ENV" -name 'libcudnn_ops_infer.so*' 2>/dev/null
+python -c "import torch; print(torch.__version__, torch.version.cuda)"
+```
+
+If `libcudnn_ops_infer.so.8` exists inside the venv, point `LD_LIBRARY_PATH` at the containing directory before starting `screencastgen-server`:
+
+```bash
+export CUDNN_LIB_DIR="$VIRTUAL_ENV/lib/python3.10/site-packages/nvidia/cudnn/lib"
+export LD_LIBRARY_PATH="$CUDNN_LIB_DIR:$LD_LIBRARY_PATH"
+python -c "import ctypes; ctypes.CDLL('libcudnn_ops_infer.so.8'); print('ok')"
+```
+
+If the library is not present, install a cuDNN 8 runtime compatible with the WhisperX environment, for example:
+
+```bash
+uv pip install "nvidia-cudnn-cu12<9"
+```
+
+The codebase also includes a WhisperX-specific CPU fallback when CUDA is selected but `libcudnn_ops_infer.so.8` cannot be loaded. That keeps `/align` and `/transcribe` working, but WhisperX will run on CPU until the GPU runtime is fixed.
+
 ```
 CPU VM                                        GPU VM (screencastgen-server)
 +--------------------------+   HTTP :8100  +--------------------------+

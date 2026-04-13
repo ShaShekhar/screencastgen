@@ -6,7 +6,11 @@ from typing import List
 
 from ..tts.base import resolve_device
 from ...types import WordTiming
-from ...whisperx_compat import load_whisperx_align_model, load_whisperx_model
+from ...whisperx_compat import (
+    load_whisperx_align_model,
+    load_whisperx_model,
+    resolve_whisperx_device,
+)
 
 
 def align_with_whisperx(
@@ -20,6 +24,7 @@ def align_with_whisperx(
     import whisperx
 
     device = resolve_device(device)
+    device = resolve_whisperx_device(device)
     lang_code = language.split("-")[0]
 
     model = load_whisperx_model("base", device, compute_type="float32")

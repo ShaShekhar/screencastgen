@@ -15,7 +15,7 @@ import threading
 from dataclasses import dataclass
 
 from .providers.tts.base import resolve_device
-from .whisperx_compat import load_whisperx_model
+from .whisperx_compat import load_whisperx_model, resolve_whisperx_device
 
 
 @dataclass
@@ -60,6 +60,7 @@ def transcribe_audio(
     import whisperx
 
     device = resolve_device(device)
+    device = resolve_whisperx_device(device)
     lang_code = language.split("-")[0]
 
     compute_type = "float16" if device == "cuda" else "float32"
