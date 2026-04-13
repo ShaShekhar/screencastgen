@@ -3,6 +3,7 @@ audio/
 *.mp3
 *.wav
 *.ogg
+!web/backend/voices/*.wav
 
 # Credentials
 *service*.json
