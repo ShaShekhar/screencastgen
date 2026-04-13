@@ -15,6 +15,7 @@ import threading
 from dataclasses import dataclass
 
 from .providers.tts.base import resolve_device
+from .whisperx_compat import load_whisperx_model
 
 
 @dataclass
@@ -38,9 +39,7 @@ def _get_transcriber(
         if cached is not None:
             return cached
 
-        import whisperx
-
-        model = whisperx.load_model(model_name, device, compute_type=compute_type)
+        model = load_whisperx_model(model_name, device, compute_type=compute_type)
         loaded = _LoadedTranscriber(model=model, lock=threading.Lock())
         _MODEL_CACHE[key] = loaded
         return loaded

@@ -11,6 +11,7 @@ from .providers.tts import (
     register_backend_download_args,
 )
 from .providers.tts.base import BackendArg
+from .whisperx_compat import load_whisperx_align_model, load_whisperx_model
 
 
 @dataclass(frozen=True)
@@ -32,12 +33,10 @@ def _get_cache_dir() -> str:
 def _download_whisperx(args) -> None:
     print("\n--- Downloading WhisperX models ---")
     try:
-        import whisperx as wx
-
         print("Loading Whisper base model...")
-        wx.load_model("base", "cpu", compute_type="float32")
+        load_whisperx_model("base", "cpu", compute_type="float32")
         print("Loading alignment model...")
-        wx.load_align_model(language_code="en", device="cpu")
+        load_whisperx_align_model(language_code="en", device="cpu")
         print("WhisperX models ready.")
     except ImportError:
         print("ERROR: whisperx not installed. Run: pip install whisperx")

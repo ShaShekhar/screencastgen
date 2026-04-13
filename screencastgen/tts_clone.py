@@ -7,6 +7,7 @@ from typing import Optional
 
 from .providers.tts.base import resolve_device
 from .constants import DEFAULT_CLONE_CHUNK_BYTES
+from .whisperx_compat import load_whisperx_model
 
 
 class F5TTSBackend:
@@ -44,7 +45,7 @@ class F5TTSBackend:
             print("  Auto-transcribing reference audio...")
             import whisperx
             audio = whisperx.load_audio(self.ref_audio_path)
-            model = whisperx.load_model("base", self.device, compute_type="float32")
+            model = load_whisperx_model("base", self.device, compute_type="float32")
             result = model.transcribe(audio)
             self.ref_text = " ".join(
                 seg["text"] for seg in result.get("segments", [])
