@@ -41,6 +41,7 @@ class TTSRequest(BasePipelineRequest):
     ref_text: Optional[str] = None
     tts_server_url: Optional[str] = None
     aligner: str = "whisperx"
+    tts_concurrency: int = 1
 
 
 @dataclass

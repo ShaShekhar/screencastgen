@@ -96,6 +96,7 @@ def run_highlight_pipeline(
             request.output_dir,
             request.verbose,
             reporter=reporter,
+            concurrency=getattr(request, "tts_concurrency", 1),
         )
         if has_failed_chunks(tracker):
             msg = "Highlight pipeline failed: one or more chunks did not complete."

@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     OUTPUT_DIR: str = "./outputs"
     MAX_UPLOAD_SIZE_MB: int = 200
     TTS_SERVER_URL: str = "http://localhost:8100"
+    # How many chunks the worker submits to the TTS server in parallel.
+    # The server batches concurrent requests into one GPU forward pass, so raising
+    # this is what fills the server's --max-batch and lifts GPU utilization.
+    TTS_CONCURRENCY: int = 8
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173"]
 
     # Storage backend: "local" (default), "gcs", or "s3"

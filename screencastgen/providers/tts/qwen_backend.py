@@ -54,7 +54,7 @@ class QwenTTS:
 
     @property
     def max_chunk_bytes(self) -> int:
-        return 20000
+        return 1500
 
     @property
     def output_format(self) -> str:
@@ -97,6 +97,58 @@ class QwenTTS:
             )
 
         sf.write(output_path, wavs[0], sr)
+
+    def synthesize_batch(
+        self,
+        texts: list,
+        language: Optional[str] = None,
+        ref_audio_path: Optional[str] = None,
+        ref_text: Optional[str] = None,
+    ) -> list:
+        """Run one batched forward pass over *texts* and return raw WAV bytes per item.
+
+        All items in the batch share the same reference voice (``ref_audio_path`` +
+        ``ref_text``) — voice clone inputs in Qwen3-TTS are per-call, not per-item.
+        Callers are responsible for grouping by reference before invoking this.
+        """
+        self._ensure_model()
+
+        import io
+
+        import soundfile as sf
+
+        n = len(texts)
+        if n == 0:
+            return []
+
+        resolved_language = (
+            _LANG_MAP.get((language or "").lower(), self._language)
+            if language
+            else self._language
+        )
+        languages = [resolved_language] * n
+
+        if ref_audio_path:
+            cleaned_ref_text = (ref_text or "").strip()
+            wavs, sr = self._model.generate_voice_clone(
+                text=texts,
+                language=languages,
+                ref_audio=ref_audio_path,
+                ref_text=cleaned_ref_text,
+                x_vector_only_mode=not cleaned_ref_text,
+            )
+        else:
+            wavs, sr = self._model.generate_custom_voice(
+                text=texts,
+                language=languages,
+            )
+
+        results: list = []
+        for wav in wavs:
+            buf = io.BytesIO()
+            sf.write(buf, wav, sr, format="WAV")
+            results.append(buf.getvalue())
+        return results
 
 
 def _build_kwargs(args, invocation: str):

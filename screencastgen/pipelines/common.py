@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Optional
 
 from ..constants import CHUNK_FILE_PATTERN, MAX_CHUNK_BYTES
@@ -157,8 +159,14 @@ def synthesize_chunks(
     output_dir,
     verbose=False,
     reporter: Optional[PipelineReporter] = None,
+    concurrency: int = 1,
 ):
-    """Synthesize audio chunks using the provided backend."""
+    """Synthesize audio chunks using the provided backend.
+
+    When *concurrency* > 1, chunks are submitted in parallel via a thread pool —
+    useful for remote backends that can handle concurrent requests. Tracker and
+    reporter updates are serialized so state and progress events stay coherent.
+    """
     reporter = get_reporter(reporter)
     if not chunks_to_process:
         summary = tracker.get_summary()
@@ -169,30 +177,57 @@ def synthesize_chunks(
         return 0
 
     ext = backend.output_format
-    processed_count = 0
-    for chunk_num, chunk, chunk_hash in chunks_to_process:
+    max_workers = max(1, int(concurrency or 1))
+    state_lock = threading.Lock()
+    counters = {"processed": 0, "completed": 0}
+
+    def _worker(task):
+        chunk_num, chunk, chunk_hash = task
         chunk_file = os.path.join(output_dir, CHUNK_FILE_PATTERN.format(num=chunk_num, ext=ext))
-        reporter.line(f"\nProcessing chunk {chunk_num}/{total_chunks}...")
-        reporter.emit(phase="synthesizing", current=chunk_num, total=total_chunks)
-        if verbose:
-            reporter.line(f"  Size: {len(chunk.encode('utf-8'))} bytes")
-            reporter.line(f"  Preview: {chunk[:80]}...")
+
+        with state_lock:
+            reporter.line(f"\nProcessing chunk {chunk_num}/{total_chunks}...")
+            if verbose:
+                reporter.line(f"  Size: {len(chunk.encode('utf-8'))} bytes")
+                reporter.line(f"  Preview: {chunk[:80]}...")
 
         try:
             backend.synthesize(chunk, chunk_file)
-            tracker.mark_processed(chunk_num, chunk_hash, chunk_file)
-            processed_count += 1
-            reporter.line(f"  Created {chunk_file}")
+            error_msg: Optional[str] = None
         except Exception as exc:
             error_msg = str(exc)
-            reporter.line(f"  Error: {error_msg}")
-            tracker.mark_failed(chunk_num, chunk_hash, error_msg)
 
-            if "sentence" in error_msg.lower() and "too long" in error_msg.lower():
-                for j, sent in enumerate(re.split(r"(?<=[.!?])\s*", chunk)):
-                    if sent.strip() and len(sent.encode("utf-8")) > 850:
-                        reporter.line(f"    Sentence {j + 1}: {len(sent.encode('utf-8'))} bytes")
+        with state_lock:
+            counters["completed"] += 1
+            if error_msg is None:
+                tracker.mark_processed(chunk_num, chunk_hash, chunk_file)
+                counters["processed"] += 1
+                reporter.line(f"  Created {chunk_file}")
+            else:
+                reporter.line(f"  Error: {error_msg}")
+                tracker.mark_failed(chunk_num, chunk_hash, error_msg)
+                if "sentence" in error_msg.lower() and "too long" in error_msg.lower():
+                    for j, sent in enumerate(re.split(r"(?<=[.!?])\s*", chunk)):
+                        if sent.strip() and len(sent.encode("utf-8")) > 850:
+                            reporter.line(
+                                f"    Sentence {j + 1}: {len(sent.encode('utf-8'))} bytes"
+                            )
+            reporter.emit(
+                phase="synthesizing",
+                current=counters["completed"],
+                total=total_chunks,
+            )
 
+    if max_workers == 1:
+        for task in chunks_to_process:
+            _worker(task)
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = [pool.submit(_worker, task) for task in chunks_to_process]
+            for fut in as_completed(futures):
+                fut.result()
+
+    processed_count = counters["processed"]
     summary = tracker.get_summary()
     reporter.line("\n=== SYNTHESIS COMPLETE ===")
     reporter.line(f"Processed this session: {processed_count}")

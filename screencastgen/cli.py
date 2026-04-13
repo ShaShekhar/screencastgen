@@ -68,6 +68,13 @@ def _add_tts_backend_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--voice", default=None, help="Voice name (backend-specific)")
     p.add_argument("--ref-audio", default=None, help="Reference audio for voice cloning backends")
     p.add_argument("--ref-text", default=None, help="Transcript of reference audio")
+    p.add_argument(
+        "--tts-concurrency",
+        type=int,
+        default=1,
+        help="Number of chunks to synthesize in parallel (default: 1). "
+        "Raise this with --backend remote when the server has a pool of workers.",
+    )
     register_backend_args(p, context="cli")
 
 

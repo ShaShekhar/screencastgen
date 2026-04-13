@@ -21,25 +21,21 @@ GET  /health       — Readiness and backend info
 """
 
 import argparse
-import io
-import json
+import asyncio
 import os
 import sys
 import tempfile
-import threading
 from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Server state — populated by startup
 # ---------------------------------------------------------------------------
 _backend = None
+_batcher = None                         # BatchingSynthesizer; set in main()
 _backend_name: str = ""
 _device: str = "auto"
 _aligner_name: str = "whisperx"
 _lipsync_provider_name: str = "auto"
-
-# Serializes per-request voice overrides on the shared backend instance.
-_synthesize_lock = threading.Lock()
 
 
 def _create_app():
@@ -83,72 +79,6 @@ def _create_app():
             "ogg": "audio/ogg",
         }.get(ext, "application/octet-stream")
 
-    def _run_synthesis(
-        text: str,
-        language: str,
-        ref_audio_bytes: Optional[bytes],
-        ref_audio_filename: Optional[str],
-        ref_text: Optional[str],
-    ) -> bytes:
-        """Invoke the backend, optionally overriding the reference voice.
-
-        Per-request reference overrides mutate the backend instance under
-        ``_synthesize_lock`` and are reverted in a finally block so concurrent
-        requests don't see each other's voices.
-        """
-        if _backend is None:
-            raise HTTPException(503, "Backend not initialized")
-
-        ext = _backend.output_format
-        fd, tmp_path = tempfile.mkstemp(suffix=f".{ext}")
-        os.close(fd)
-
-        ref_tmp_path: Optional[str] = None
-        try:
-            if ref_audio_bytes:
-                suffix = (
-                    os.path.splitext(ref_audio_filename or "ref.wav")[1] or ".wav"
-                )
-                fd_ref, ref_tmp_path = tempfile.mkstemp(suffix=suffix)
-                os.close(fd_ref)
-                with open(ref_tmp_path, "wb") as f:
-                    f.write(ref_audio_bytes)
-
-            with _synthesize_lock:
-                # Update language if the backend exposes it.
-                prev_language = getattr(_backend, "_language", None)
-                if hasattr(_backend, "_language"):
-                    # Qwen backend stores a normalized label keyed by code.
-                    from .providers.tts.qwen_backend import _LANG_MAP
-
-                    _backend._language = _LANG_MAP.get(language.lower(), prev_language)
-
-                # Override reference voice for this request only.
-                prev_ref_audio = getattr(_backend, "ref_audio_path", None)
-                prev_ref_text = getattr(_backend, "ref_text", None)
-                if ref_tmp_path is not None and hasattr(_backend, "ref_audio_path"):
-                    _backend.ref_audio_path = ref_tmp_path
-                    if hasattr(_backend, "ref_text"):
-                        _backend.ref_text = ref_text
-
-                try:
-                    _backend.synthesize(text, tmp_path)
-                finally:
-                    if hasattr(_backend, "_language"):
-                        _backend._language = prev_language
-                    if ref_tmp_path is not None and hasattr(_backend, "ref_audio_path"):
-                        _backend.ref_audio_path = prev_ref_audio
-                        if hasattr(_backend, "ref_text"):
-                            _backend.ref_text = prev_ref_text
-
-            with open(tmp_path, "rb") as f:
-                return f.read()
-        finally:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-            if ref_tmp_path and os.path.exists(ref_tmp_path):
-                os.unlink(ref_tmp_path)
-
     @app.post("/synthesize")
     async def synthesize(request: Request):
         """Synthesize text to audio.
@@ -156,8 +86,12 @@ def _create_app():
         Accepts either application/json (``{text, language}``) or
         multipart/form-data with optional ``ref_audio`` (file) and
         ``ref_text`` (string) fields for per-request voice cloning.
+
+        Requests are submitted to the ``BatchingSynthesizer`` and coalesced
+        into a single batched forward pass on the model when multiple
+        concurrent requests share the same reference voice.
         """
-        if _backend is None:
+        if _backend is None or _batcher is None:
             raise HTTPException(503, "Backend not initialized")
 
         content_type = (request.headers.get("content-type") or "").lower()
@@ -172,10 +106,11 @@ def _create_app():
             ref_text = str(ref_text_value) if ref_text_value is not None else None
             ref_audio_field = form.get("ref_audio")
             ref_audio_bytes: Optional[bytes] = None
-            ref_audio_filename: Optional[str] = None
+            ref_audio_suffix: Optional[str] = None
             if ref_audio_field is not None and hasattr(ref_audio_field, "read"):
                 ref_audio_bytes = await ref_audio_field.read()
                 ref_audio_filename = getattr(ref_audio_field, "filename", None)
+                ref_audio_suffix = os.path.splitext(ref_audio_filename or "ref.wav")[1] or ".wav"
         else:
             payload = await request.json()
             try:
@@ -186,15 +121,16 @@ def _create_app():
             language = req.language
             ref_text = None
             ref_audio_bytes = None
-            ref_audio_filename = None
+            ref_audio_suffix = None
 
-        audio_bytes = _run_synthesis(
+        fut = _batcher.submit(
             text=text,
             language=language,
             ref_audio_bytes=ref_audio_bytes,
-            ref_audio_filename=ref_audio_filename,
+            ref_audio_suffix=ref_audio_suffix,
             ref_text=ref_text,
         )
+        audio_bytes = await asyncio.wrap_future(fut)
         return Response(content=audio_bytes, media_type=_media_type_for(_backend.output_format))
 
     # ------------------------------------------------------------------
@@ -376,12 +312,32 @@ def _build_server_parser() -> argparse.ArgumentParser:
         choices=get_lipsync_provider_names(),
         help="Lip-sync provider to use for /lipsync requests",
     )
+    p.add_argument(
+        "--max-batch",
+        type=int,
+        default=8,
+        help=(
+            "Maximum number of /synthesize requests coalesced into a single "
+            "batched model call (default: 8). Raise to saturate the GPU on "
+            "small models like Qwen3-TTS 0.6B; 8 is safe on an L4."
+        ),
+    )
+    p.add_argument(
+        "--batch-window-ms",
+        type=int,
+        default=30,
+        help=(
+            "Milliseconds the batcher waits for additional concurrent "
+            "requests to fill a partial batch (default: 30). Set to 0 to "
+            "disable coalescing and run requests as they arrive."
+        ),
+    )
     register_backend_args(p, context="server")
     return p
 
 
 def main(argv=None):
-    global _backend, _backend_name, _device, _aligner_name, _lipsync_provider_name
+    global _backend, _batcher, _backend_name, _device, _aligner_name, _lipsync_provider_name
 
     parser = _build_server_parser()
     args = parser.parse_args(argv)
@@ -408,8 +364,28 @@ def main(argv=None):
     if hasattr(_backend, "_ensure_model"):
         _backend._ensure_model()
 
-    print(f"Backend ready. Serving on {args.host}:{args.port}")
-    print(f"Capabilities: TTS synthesis, alignment, lip-sync generation")
+    if not hasattr(_backend, "synthesize_batch"):
+        print(
+            f"ERROR: backend '{_backend_name}' does not implement synthesize_batch; "
+            "the inference server requires a batch-capable backend.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    from .inference_batcher import BatchingSynthesizer
+
+    _batcher = BatchingSynthesizer(
+        backend=_backend,
+        max_batch=args.max_batch,
+        batch_window_ms=args.batch_window_ms,
+    )
+    _batcher.start()
+
+    print(
+        f"Backend ready. Serving on {args.host}:{args.port} "
+        f"(max_batch={args.max_batch}, batch_window_ms={args.batch_window_ms})"
+    )
+    print("Capabilities: TTS synthesis, alignment, lip-sync generation")
 
     import uvicorn
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
