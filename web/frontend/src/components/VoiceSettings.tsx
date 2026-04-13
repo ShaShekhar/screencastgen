@@ -50,16 +50,6 @@ export default function VoiceSettings({ config, onChange }: Props) {
         if (cancelled) return;
         setVoices(vs);
         if (ls.length > 0) setLanguages(ls);
-        // Default-select first available bundled voice if none chosen.
-        if (!highlightCfg.voice_id && !highlightCfg.ref_audio_file_id) {
-          const firstAvailable = vs.find((v) => v.available);
-          if (firstAvailable) {
-            onChange({
-              voice_id: firstAvailable.id,
-              language: firstAvailable.language || config.language,
-            });
-          }
-        }
       })
       .catch((e) => {
         if (cancelled) return;
@@ -68,7 +58,6 @@ export default function VoiceSettings({ config, onChange }: Props) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Revoke previous blob URLs to avoid leaks.
