@@ -89,6 +89,42 @@ export interface LipsyncConfig {
   fps: number;
 }
 
+export interface ReaderWord {
+  word: string;
+  start: number;
+  end: number;
+}
+
+export interface ReaderChunk {
+  chunk_num: number;
+  text: string;
+  offset: number;
+  pages: number[];
+  words: ReaderWord[];
+}
+
+export interface ReaderPages {
+  dir: string;
+  image_width: number;
+  files: Record<string, string>;
+}
+
+export interface ReaderManifest {
+  version: number;
+  title: string;
+  language: string;
+  source_type: string;
+  duration: number;
+  audio: string;
+  pages: ReaderPages | null;
+  chunks: ReaderChunk[];
+}
+
+export interface ReaderStatus {
+  available: boolean;
+  message: string;
+}
+
 export interface JobCreateRequest {
   pipeline_type: PipelineType;
   uploaded_file_id: string;

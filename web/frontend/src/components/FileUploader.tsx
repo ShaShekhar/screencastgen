@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useCallback, useRef, useState } from "react";
 import { uploadFile } from "../api/uploads";
 import { UploadedFile } from "../types";
 
@@ -38,7 +38,7 @@ export default function FileUploader({ accept, label, onUploaded }: Props) {
   );
 
   const onDrop = useCallback(
-    (e: React.DragEvent) => {
+    (e: DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       setDragOver(false);
       const file = e.dataTransfer.files[0];
@@ -47,7 +47,7 @@ export default function FileUploader({ accept, label, onUploaded }: Props) {
     [handleFile]
   );
 
-  const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
   };

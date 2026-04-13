@@ -39,6 +39,26 @@ from ..services.storage import get_upload_abs_path, get_output_dir, upload_outpu
 logger = logging.getLogger(__name__)
 
 
+def _upload_reader_assets(job_id: uuid.UUID, output_dir: str) -> None:
+    """Best-effort upload of reader manifest/audio/page images to storage."""
+    from screencastgen.reader_assets import AUDIO_NAME, MANIFEST_NAME, PAGES_DIR
+
+    candidates = [MANIFEST_NAME, AUDIO_NAME]
+    pages_abs = os.path.join(output_dir, PAGES_DIR)
+    if os.path.isdir(pages_abs):
+        for name in sorted(os.listdir(pages_abs)):
+            candidates.append(f"{PAGES_DIR}/{name}")
+
+    for rel in candidates:
+        abs_path = os.path.join(output_dir, rel)
+        if not os.path.isfile(abs_path):
+            continue
+        try:
+            upload_output(job_id, rel)
+        except Exception as exc:
+            logger.warning("Reader asset upload failed for %s: %s", rel, exc)
+
+
 def _build_audio_request(job: Job, pdf_path: str, output_dir: str) -> AudioPipelineRequest:
     cfg = job.config_json or {}
     output_filename = os.path.splitext(os.path.basename(pdf_path))[0] + ".wav"
@@ -244,6 +264,8 @@ def run_pipeline_task(self, job_id: str):
             result = pipeline_func(request, reporter=reporter)
             if result.exit_code == 0 and result.output_path and os.path.isfile(result.output_path):
                 upload_output(uuid.UUID(job_id), result.output_name)
+                if pipeline_type == "highlight":
+                    _upload_reader_assets(uuid.UUID(job_id), output_dir)
                 job.status = JobStatus.completed
                 job.progress_phase = "done"
                 job.error_message = None

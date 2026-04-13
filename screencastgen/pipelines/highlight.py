@@ -119,11 +119,41 @@ def run_highlight_pipeline(
             return PipelineRunResult(exit_code=1, error_message=msg)
 
         if fmt == "epub":
-            return build_highlight_epub(request, aligned_chunks, tracker, reporter=reporter)
-        return build_highlight_mp4(request, aligned_chunks, pdf_words=pdf_words, reporter=reporter)
+            result = build_highlight_epub(request, aligned_chunks, tracker, reporter=reporter)
+        else:
+            result = build_highlight_mp4(request, aligned_chunks, pdf_words=pdf_words, reporter=reporter)
+
+        if result.exit_code == 0:
+            try:
+                _build_reader_assets(request, aligned_chunks, reporter=reporter)
+            except Exception as exc:
+                reporter.line(f"  Reader assets skipped: {exc}")
+        return result
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return PipelineRunResult(exit_code=1, error_message=str(exc))
+
+
+def _build_reader_assets(
+    request: HighlightPipelineRequest,
+    aligned_chunks,
+    *,
+    reporter: Optional[PipelineReporter] = None,
+) -> None:
+    """Produce the browser-reader manifest/audio/page images for *request*."""
+    from ..reader_assets import build_reader_assets
+
+    reporter = get_reporter(reporter)
+    reporter.phase_start("reader_assets", "\n=== BUILDING READER ASSETS ===")
+    manifest_path = build_reader_assets(
+        aligned_chunks=aligned_chunks,
+        output_dir=request.output_dir,
+        pdf_path=request.pdf,
+        title=build_title(request.pdf),
+        language=request.language,
+    )
+    if manifest_path:
+        reporter.line(f"  Reader manifest: {manifest_path}")
 
 
 def build_highlight_epub(

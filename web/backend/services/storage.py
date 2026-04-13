@@ -71,6 +71,11 @@ def get_output_abs_path(job_id: uuid.UUID, output_path: str) -> str:
     return get_storage_backend().get_output_local_path(job_id, output_path)
 
 
+def get_output_local_path(job_id: uuid.UUID, output_path: str) -> str:
+    """Return a local path for a job output, downloading from remote storage if needed."""
+    return get_storage_backend().get_output_local_path(job_id, output_path)
+
+
 def upload_output(job_id: uuid.UUID, output_path: str) -> None:
     return get_storage_backend().upload_output(job_id, output_path)
 

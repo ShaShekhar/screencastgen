@@ -222,7 +222,16 @@ class GCSStorageBackend(StorageBackend):
         return path
 
     def get_output_local_path(self, job_id: uuid.UUID, output_path: str) -> str:
-        return os.path.join(self.output_dir, str(job_id), output_path)
+        local_path = os.path.join(self.output_dir, str(job_id), output_path)
+        if os.path.isfile(local_path):
+            return local_path
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        key = _output_object_key(job_id, output_path, self.prefix)
+        blob = self.bucket.blob(key)
+        if not blob.exists():
+            raise FileNotFoundError(f"Object not found in GCS: {key}")
+        blob.download_to_filename(local_path)
+        return local_path
 
     def upload_output(self, job_id: uuid.UUID, output_path: str) -> None:
         local = self.get_output_local_path(job_id, output_path)
@@ -318,7 +327,18 @@ class S3StorageBackend(StorageBackend):
         return path
 
     def get_output_local_path(self, job_id: uuid.UUID, output_path: str) -> str:
-        return os.path.join(self.output_dir, str(job_id), output_path)
+        from botocore.exceptions import ClientError
+
+        local_path = os.path.join(self.output_dir, str(job_id), output_path)
+        if os.path.isfile(local_path):
+            return local_path
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        key = _output_object_key(job_id, output_path, self.prefix)
+        try:
+            self.client.download_file(self.bucket_name, key, local_path)
+        except ClientError as exc:
+            raise FileNotFoundError(f"Object not found in S3: {key}") from exc
+        return local_path
 
     def upload_output(self, job_id: uuid.UUID, output_path: str) -> None:
         local = self.get_output_local_path(job_id, output_path)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { deleteJob, getDownloadUrl, getJob } from "../api/jobs";
+import { getReaderStatus } from "../api/reader";
 import ProgressBar from "../components/ProgressBar";
 import { useJobProgress } from "../hooks/useJobProgress";
 import { Job, JobStatus } from "../types";
@@ -25,6 +26,8 @@ export default function JobDetail() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [readerReady, setReaderReady] = useState<boolean | null>(null);
+  const [readerMessage, setReaderMessage] = useState<string | null>(null);
 
   const isActive = job?.status === "pending" || job?.status === "running";
   const progress = useJobProgress(id, isActive ?? false);
@@ -44,6 +47,35 @@ export default function JobDetail() {
   useEffect(() => {
     fetchJob();
   }, [fetchJob]);
+
+  useEffect(() => {
+    if (!id || !job) return;
+    if (job.pipeline_type !== "highlight" || job.status !== "completed") {
+      setReaderReady(null);
+      setReaderMessage(null);
+      return;
+    }
+
+    let cancelled = false;
+    setReaderReady(null);
+    setReaderMessage("Checking browser reader...");
+
+    getReaderStatus(id)
+      .then((status) => {
+        if (cancelled) return;
+        setReaderReady(status.available);
+        setReaderMessage(status.message);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setReaderReady(false);
+        setReaderMessage("Could not verify browser reader availability.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, job]);
 
   // Update job from SSE progress
   useEffect(() => {
@@ -141,12 +173,35 @@ export default function JobDetail() {
             Output Ready
           </h2>
           <p className="text-sm text-green-700 mb-3">{job.output_path}</p>
-          <a
-            href={getDownloadUrl(job.id)}
-            className="inline-block bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition"
-          >
-            Download
-          </a>
+          <div className="flex flex-wrap gap-3">
+            <a
+              href={getDownloadUrl(job.id)}
+              className="inline-block bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition"
+            >
+              Download
+            </a>
+            {job.pipeline_type === "highlight" && readerReady && (
+              <Link
+                to={`/jobs/${job.id}/read`}
+                className="inline-block bg-white text-green-700 border border-green-300 px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-100 transition"
+              >
+                Open Reader
+              </Link>
+            )}
+          </div>
+          {job.pipeline_type === "highlight" && readerMessage && (
+            <p
+              className={`mt-3 text-sm ${
+                readerReady === false
+                  ? "text-amber-700"
+                  : readerReady === true
+                    ? "text-green-700"
+                    : "text-gray-600"
+              }`}
+            >
+              {readerMessage}
+            </p>
+          )}
         </div>
       )}
 
