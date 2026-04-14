@@ -169,7 +169,7 @@ export default function JobDetail() {
       {/* Completed */}
       {job.status === "completed" && job.output_path && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-5 mb-6">
-          {job.pipeline_type === "highlight" && readerReady ? (
+          {job.pipeline_type === "highlight" && readerReady !== false ? (
             <Link
               to={`/jobs/${job.id}/read`}
               className="group flex items-center gap-4 rounded-lg p-2 -m-2 hover:bg-green-100/70 transition"

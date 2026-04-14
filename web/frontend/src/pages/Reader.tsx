@@ -55,6 +55,7 @@ export default function Reader() {
   const [currentTime, setCurrentTime] = useState(0);
   const [autoScroll, setAutoScroll] = useState(true);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -62,6 +63,7 @@ export default function Reader() {
   const scrollTargetRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasStartedPlayingRef = useRef(false);
 
   useEffect(() => {
     if (!id) return;
@@ -153,15 +155,26 @@ export default function Reader() {
     const node = container.querySelector<HTMLElement>(`[data-w="${activeIdx}"]`);
     if (!node) return;
 
-    const scrollerTop = scroller.getBoundingClientRect().top;
-    const nodeTopInScroller =
-      node.getBoundingClientRect().top - scrollerTop + scroller.scrollTop;
-    const target =
-      nodeTopInScroller -
-      scroller.clientHeight / 2 +
-      node.offsetHeight / 2;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const nodeRect = node.getBoundingClientRect();
+    const relativeY = nodeRect.top - scrollerRect.top;
+    const scrollerH = scroller.clientHeight;
+    // Comfort band: 25%–65% of viewport. Only scroll when the active word
+    // leaves the band, then reposition it near the top of the band so there's
+    // a stretch of comfortable reading before the next jump.
+    const bandTop = scrollerH * 0.25;
+    const bandBottom = scrollerH * 0.65;
+    if (relativeY >= bandTop && relativeY + nodeRect.height <= bandBottom) {
+      return;
+    }
+    const desiredRelativeY = scrollerH * 0.3;
+    const delta = relativeY - desiredRelativeY;
     const maxScroll = scroller.scrollHeight - scroller.clientHeight;
-    scrollTargetRef.current = Math.max(0, Math.min(maxScroll, target));
+    const nextTarget = Math.max(
+      0,
+      Math.min(maxScroll, scroller.scrollTop + delta),
+    );
+    scrollTargetRef.current = nextTarget;
 
     if (rafRef.current != null) return;
     const step = () => {
@@ -203,6 +216,10 @@ export default function Reader() {
   const revealControls = useCallback(() => {
     setControlsVisible(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    if (!hasStartedPlayingRef.current) {
+      hideTimerRef.current = null;
+      return;
+    }
     hideTimerRef.current = setTimeout(() => {
       setControlsVisible(false);
       hideTimerRef.current = null;
@@ -215,22 +232,27 @@ export default function Reader() {
         revealControls();
       }
     };
-    const onLeave = () => {
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-      setControlsVisible(false);
-    };
     window.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseleave", onLeave);
-    hideTimerRef.current = setTimeout(() => {
-      setControlsVisible(false);
-      hideTimerRef.current = null;
-    }, 3000);
     return () => {
       window.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseleave", onLeave);
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     };
   }, [revealControls]);
+
+  useEffect(() => {
+    if (!hasStartedPlaying) return;
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => {
+      setControlsVisible(false);
+      hideTimerRef.current = null;
+    }, 2500);
+    return () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+        hideTimerRef.current = null;
+      }
+    };
+  }, [hasStartedPlaying]);
 
   const seekToWord = useCallback(
     (idx: number) => {
@@ -397,7 +419,13 @@ export default function Reader() {
         ref={audioRef}
         src={id ? getReaderAudioUrl(id) : undefined}
         onTimeUpdate={handleTimeUpdate}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setPlaying(true);
+          if (!hasStartedPlayingRef.current) {
+            hasStartedPlayingRef.current = true;
+            setHasStartedPlaying(true);
+          }
+        }}
         onPause={() => setPlaying(false)}
         preload="auto"
       />
