@@ -54,9 +54,14 @@ export default function Reader() {
   const [rate, setRate] = useState(1);
   const [currentTime, setCurrentTime] = useState(0);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [controlsVisible, setControlsVisible] = useState(true);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLElement | null>(null);
+  const scrollTargetRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -141,13 +146,91 @@ export default function Reader() {
   }, [flatWords]);
 
   useEffect(() => {
-    if (!autoScroll || activeIdx < 0 || !containerRef.current) return;
-    const node = containerRef.current.querySelector<HTMLElement>(
-      `[data-w="${activeIdx}"]`,
-    );
+    if (!autoScroll || activeIdx < 0) return;
+    const container = containerRef.current;
+    const scroller = scrollerRef.current;
+    if (!container || !scroller) return;
+    const node = container.querySelector<HTMLElement>(`[data-w="${activeIdx}"]`);
     if (!node) return;
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    const scrollerTop = scroller.getBoundingClientRect().top;
+    const nodeTopInScroller =
+      node.getBoundingClientRect().top - scrollerTop + scroller.scrollTop;
+    const target =
+      nodeTopInScroller -
+      scroller.clientHeight / 2 +
+      node.offsetHeight / 2;
+    const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+    scrollTargetRef.current = Math.max(0, Math.min(maxScroll, target));
+
+    if (rafRef.current != null) return;
+    const step = () => {
+      const s = scrollerRef.current;
+      const tgt = scrollTargetRef.current;
+      if (!s || tgt == null) {
+        rafRef.current = null;
+        return;
+      }
+      const current = s.scrollTop;
+      const diff = tgt - current;
+      if (Math.abs(diff) < 0.5) {
+        s.scrollTop = tgt;
+        scrollTargetRef.current = null;
+        rafRef.current = null;
+        return;
+      }
+      s.scrollTop = current + diff * 0.12;
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
   }, [activeIdx, autoScroll]);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  const cancelAutoScroll = useCallback(() => {
+    setAutoScroll(false);
+    scrollTargetRef.current = null;
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, []);
+
+  const revealControls = useCallback(() => {
+    setControlsVisible(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => {
+      setControlsVisible(false);
+      hideTimerRef.current = null;
+    }, 2500);
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (e.clientY > window.innerHeight - 160) {
+        revealControls();
+      }
+    };
+    const onLeave = () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      setControlsVisible(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseleave", onLeave);
+    hideTimerRef.current = setTimeout(() => {
+      setControlsVisible(false);
+      hideTimerRef.current = null;
+    }, 3000);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseleave", onLeave);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, [revealControls]);
 
   const seekToWord = useCallback(
     (idx: number) => {
@@ -236,7 +319,10 @@ export default function Reader() {
         )}
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 pb-40">
+      <main
+        ref={scrollerRef}
+        className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 pb-24"
+      >
         <div
           className={
             "max-w-6xl mx-auto " +
@@ -264,8 +350,8 @@ export default function Reader() {
               "leading-relaxed text-lg sm:text-xl font-serif " +
               (activePageImage ? "min-w-0" : "max-w-2xl mx-auto")
             }
-            onWheel={() => setAutoScroll(false)}
-            onTouchMove={() => setAutoScroll(false)}
+            onWheel={cancelAutoScroll}
+            onTouchMove={cancelAutoScroll}
           >
             {pages.map(({ page, chunks }) => (
               <section key={page} className="mb-10">
@@ -307,65 +393,88 @@ export default function Reader() {
         </div>
       </main>
 
-      <footer className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-200 shadow-lg">
-        <audio
-          ref={audioRef}
-          src={id ? getReaderAudioUrl(id) : undefined}
-          onTimeUpdate={handleTimeUpdate}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          preload="auto"
-        />
-        <div className="max-w-4xl mx-auto px-4 py-3 flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                setAutoScroll(true);
-                togglePlay();
-              }}
-              className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center hover:bg-gray-700 transition shrink-0"
-              aria-label={playing ? "Pause" : "Play"}
-            >
-              {playing ? "❚❚" : "▶"}
-            </button>
-            <span className="text-xs text-gray-500 tabular-nums w-10 text-right">
-              {fmtTime(currentTime)}
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              step={0.1}
-              value={currentTime}
-              onChange={handleScrub}
-              className="flex-1 accent-gray-900"
-            />
-            <span className="text-xs text-gray-500 tabular-nums w-10">
-              {fmtTime(duration)}
-            </span>
-            <select
-              value={rate}
-              onChange={(e) => handleRateChange(Number(e.target.value))}
-              className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white shrink-0"
-              aria-label="Playback speed"
-            >
-              {PLAYBACK_RATES.map((nextRate) => (
-                <option key={nextRate} value={nextRate}>
-                  {nextRate}×
-                </option>
-              ))}
-            </select>
+      <audio
+        ref={audioRef}
+        src={id ? getReaderAudioUrl(id) : undefined}
+        onTimeUpdate={handleTimeUpdate}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        preload="auto"
+      />
+
+      <div
+        className="absolute bottom-0 inset-x-0 z-20"
+        onMouseEnter={revealControls}
+        onMouseMove={revealControls}
+      >
+        <footer
+          className={
+            "bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.15)] transform transition-all duration-300 ease-out " +
+            (controlsVisible
+              ? "translate-y-0 opacity-100"
+              : "translate-y-full opacity-0 pointer-events-none")
+          }
+        >
+          <div className="max-w-4xl mx-auto px-4 py-3 flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setAutoScroll(true);
+                  togglePlay();
+                }}
+                className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-900 to-gray-700 text-white flex items-center justify-center shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-[transform,box-shadow] duration-150 shrink-0"
+                aria-label={playing ? "Pause" : "Play"}
+              >
+                {playing ? (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <rect x="6" y="5" width="4" height="14" rx="1" />
+                    <rect x="14" y="5" width="4" height="14" rx="1" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 ml-0.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M8 5.14v13.72c0 .79.87 1.26 1.54.83l10.8-6.86a.98.98 0 0 0 0-1.66L9.54 4.31A.98.98 0 0 0 8 5.14z" />
+                  </svg>
+                )}
+              </button>
+              <span className="text-xs text-gray-500 tabular-nums w-10 text-right">
+                {fmtTime(currentTime)}
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={duration || 0}
+                step={0.1}
+                value={currentTime}
+                onChange={handleScrub}
+                className="flex-1 accent-gray-900"
+              />
+              <span className="text-xs text-gray-500 tabular-nums w-10">
+                {fmtTime(duration)}
+              </span>
+              <select
+                value={rate}
+                onChange={(e) => handleRateChange(Number(e.target.value))}
+                className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white shrink-0"
+                aria-label="Playback speed"
+              >
+                {PLAYBACK_RATES.map((nextRate) => (
+                  <option key={nextRate} value={nextRate}>
+                    {nextRate}×
+                  </option>
+                ))}
+              </select>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-gray-500 sm:self-end">
+              <input
+                type="checkbox"
+                checked={autoScroll}
+                onChange={(e) => setAutoScroll(e.target.checked)}
+              />
+              Auto-scroll to current word
+            </label>
           </div>
-          <label className="flex items-center gap-2 text-xs text-gray-500 sm:self-end">
-            <input
-              type="checkbox"
-              checked={autoScroll}
-              onChange={(e) => setAutoScroll(e.target.checked)}
-            />
-            Auto-scroll to current word
-          </label>
-        </div>
-      </footer>
+        </footer>
+      </div>
     </div>
   );
 }
