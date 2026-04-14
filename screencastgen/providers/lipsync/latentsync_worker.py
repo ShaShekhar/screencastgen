@@ -37,6 +37,9 @@ class LoadedPipeline:
 
 
 def _load_pipeline(args) -> LoadedPipeline:
+    if args.root and args.root not in sys.path:
+        sys.path.insert(0, args.root)
+
     with redirect_stdout(sys.stderr):
         import torch
         from accelerate.utils import set_seed
