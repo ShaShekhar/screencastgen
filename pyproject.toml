@@ -14,29 +14,35 @@ dependencies = [
 [project.optional-dependencies]
 qwen = [
     "qwen-tts>=0.1",
-    "torch>=2.0",
+    "torch~=2.8.0",
     "soundfile>=0.12",
 ]
 pydub = ["pydub>=0.25"]
 epub = [
     "pydub>=0.25",
-    "whisperx>=3.1",
-    "torch>=2.0",
+    "whisperx==3.8.5",
+    "torch~=2.8.0",
+    "torchaudio~=2.8.0",
+    "torchcodec>=0.6,<0.8",
 ]
 highlight = [
     "pydub>=0.25",
-    "whisperx>=3.1",
+    "whisperx==3.8.5",
     "moviepy>=2.0",
     "Pillow>=10.0",
-    "torch>=2.0",
+    "torch~=2.8.0",
+    "torchaudio~=2.8.0",
+    "torchcodec>=0.6,<0.8",
     "pymupdf>=1.24",
 ]
 lipsync = [
     "pydub>=0.25",
-    "whisperx>=3.1",
+    "whisperx==3.8.5",
     "moviepy>=2.0",
     "Pillow>=10.0",
-    "torch>=2.0",
+    "torch~=2.8.0",
+    "torchaudio~=2.8.0",
+    "torchcodec>=0.6,<0.8",
     "pymupdf>=1.24",
     "f5-tts>=1.0",
 ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import ctypes
 import threading
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, NamedTuple
 
 _PATCH_LOCK = threading.RLock()
 _PATCH_DEPTH = 0
@@ -33,6 +33,36 @@ def resolve_whisperx_device(device: str) -> str:
         return "cpu"
 
     return device
+
+
+def patch_torchaudio_audiometadata() -> None:
+    """Restore the legacy ``torchaudio.AudioMetaData`` name for pyannote.
+
+    Some pyannote.audio releases used by WhisperX evaluate this type annotation
+    at import time. Newer TorchAudio releases moved or removed the top-level
+    alias, which makes ``import whisperx`` fail before screencastgen can use the
+    model. The attribute is only needed as a type object during import.
+    """
+    try:
+        import torchaudio
+    except Exception:
+        return
+
+    if hasattr(torchaudio, "AudioMetaData"):
+        return
+
+    try:
+        from torchaudio._backend.common import AudioMetaData
+    except Exception:
+
+        class AudioMetaData(NamedTuple):
+            sample_rate: int
+            num_frames: int
+            num_channels: int
+            bits_per_sample: int
+            encoding: str
+
+    torchaudio.AudioMetaData = AudioMetaData
 
 
 @contextmanager
@@ -73,6 +103,7 @@ def allow_unsafe_torch_load() -> Iterator[None]:
 
 def load_whisperx_model(model_name: str, device: str, *, compute_type: str):
     """Load a WhisperX ASR model with PyTorch 2.6 compatibility enabled."""
+    patch_torchaudio_audiometadata()
     import whisperx
 
     device = resolve_whisperx_device(device)
@@ -82,6 +113,7 @@ def load_whisperx_model(model_name: str, device: str, *, compute_type: str):
 
 def load_whisperx_align_model(*, language_code: str, device: str):
     """Load a WhisperX alignment model with PyTorch 2.6 compatibility enabled."""
+    patch_torchaudio_audiometadata()
     import whisperx
 
     device = resolve_whisperx_device(device)
