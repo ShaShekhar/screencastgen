@@ -17,7 +17,15 @@ const PIPELINE_LABELS: Record<string, string> = {
   audio: "Audio",
   highlight: "Highlight Text Audio",
   lipsync: "Lip-Sync Video",
+  visualization: "Concept Visualization",
 };
+
+function getVisualizationResult(job: Job): Record<string, unknown> | null {
+  const value = job.config_json.visualization_result;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
 
 export default function JobDetail() {
   const { id } = useParams<{ id: string }>();
@@ -116,6 +124,21 @@ export default function JobDetail() {
     return <p className="text-red-600">Job not found</p>;
   }
 
+  const visualizationResult =
+    job.pipeline_type === "visualization" ? getVisualizationResult(job) : null;
+  const generatedCode =
+    typeof visualizationResult?.generated_code === "string"
+      ? visualizationResult.generated_code
+      : null;
+  const stderrExcerpt =
+    typeof visualizationResult?.stderr_excerpt === "string"
+      ? visualizationResult.stderr_excerpt
+      : "";
+  const stdoutExcerpt =
+    typeof visualizationResult?.stdout_excerpt === "string"
+      ? visualizationResult.stdout_excerpt
+      : "";
+
   return (
     <div className="max-w-2xl mx-auto">
       {/* Header */}
@@ -169,7 +192,25 @@ export default function JobDetail() {
       {/* Completed */}
       {job.status === "completed" && job.output_path && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-5 mb-6">
-          {job.pipeline_type === "highlight" && readerReady !== false ? (
+          {job.pipeline_type === "visualization" ? (
+            <>
+              <h2 className="text-sm font-semibold text-green-800 mb-3">
+                Animation Ready
+              </h2>
+              <video
+                className="w-full rounded-lg border border-green-200 bg-black mb-3"
+                controls
+                src={getDownloadUrl(job.id)}
+              />
+              <p className="text-sm text-green-700 mb-3">{job.output_path}</p>
+              <a
+                href={getDownloadUrl(job.id)}
+                className="inline-block bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition"
+              >
+                Download MP4
+              </a>
+            </>
+          ) : job.pipeline_type === "highlight" && readerReady !== false ? (
             <Link
               to={`/jobs/${job.id}/read`}
               className="group flex items-center gap-4 rounded-lg p-2 -m-2 hover:bg-green-100/70 transition"
@@ -215,6 +256,36 @@ export default function JobDetail() {
           )}
         </div>
       )}
+
+      {job.pipeline_type === "visualization" && generatedCode && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">
+            Generated Code
+          </h2>
+          <pre className="text-xs bg-gray-950 text-gray-100 rounded-lg p-3 overflow-auto max-h-96">
+            <code>{generatedCode}</code>
+          </pre>
+        </div>
+      )}
+
+      {job.pipeline_type === "visualization" &&
+        (stdoutExcerpt || stderrExcerpt) && (
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">
+              Render Logs
+            </h2>
+            {stderrExcerpt && (
+              <pre className="text-xs bg-red-950 text-red-50 rounded-lg p-3 overflow-auto max-h-52 mb-3">
+                <code>{stderrExcerpt}</code>
+              </pre>
+            )}
+            {stdoutExcerpt && (
+              <pre className="text-xs bg-gray-950 text-gray-100 rounded-lg p-3 overflow-auto max-h-52">
+                <code>{stdoutExcerpt}</code>
+              </pre>
+            )}
+          </div>
+        )}
 
       {/* Failed */}
       {job.status === "failed" && (

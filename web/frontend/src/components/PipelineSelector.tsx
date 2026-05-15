@@ -16,11 +16,16 @@ const PIPELINES: { type: PipelineType; title: string; desc: string }[] = [
     title: "Lip-Sync Video",
     desc: "Voice-cloned audio with a lip-synced talking head overlay",
   },
+  {
+    type: "visualization",
+    title: "Concept Visualization",
+    desc: "Prompt-driven math animation rendered as a standalone MP4",
+  },
 ];
 
 export default function PipelineSelector({ selected, onChange }: Props) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {PIPELINES.map((p) => (
         <button
           key={p.type}

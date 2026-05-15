@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from typing import Any, Optional, Type, TypeVar
 
 from ..constants import (
@@ -73,6 +73,39 @@ class LipsyncPipelineRequest(HighlightPipelineRequest):
 
 
 @dataclass
+class VisualizationPipelineRequest:
+    """Input for the prompt-to-Manim visualization pipeline."""
+
+    prompt: str
+    output: Optional[str] = None
+    output_dir: str = DEFAULT_OUTPUT_DIR
+    provider: str = "manimgl"
+    duration_seconds: int = 30
+    resolution: str = f"{DEFAULT_VIDEO_WIDTH}x{DEFAULT_VIDEO_HEIGHT}"
+    fps: int = DEFAULT_VIDEO_FPS
+    style: str = "clean"
+    audience_level: str = "general"
+    iteration_of_job_id: Optional[str] = None
+    timeout_seconds: int = 300
+    max_output_bytes: int = 512 * 1024 * 1024
+    clean: bool = False
+    verbose: bool = False
+
+
+@dataclass
+class RenderedVisualClip:
+    """Metadata for a rendered visual clip that can be composed later."""
+
+    path: str
+    duration: Optional[float]
+    fps: int
+    width: int
+    height: int
+    source_prompt: str
+    source_code: str
+
+
+@dataclass
 class PipelineRunResult:
     """Return value for a pipeline run."""
 
@@ -80,6 +113,11 @@ class PipelineRunResult:
     output_name: Optional[str] = None
     output_path: Optional[str] = None
     error_message: Optional[str] = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+def _field_names(request_type: Type[Any]) -> set[str]:
+    return {field.name for field in fields(request_type)}
 
 
 RequestT = TypeVar("RequestT", bound=BasePipelineRequest)
@@ -91,7 +129,11 @@ def coerce_request(request_type: Type[RequestT], value: Any) -> RequestT:
         return value
 
     data = {}
-    for field in fields(request_type):
-        if hasattr(value, field.name):
-            data[field.name] = getattr(value, field.name)
+    names = _field_names(request_type)
+    if isinstance(value, dict):
+        data.update({key: value[key] for key in names if key in value})
+    else:
+        for field in fields(request_type):
+            if hasattr(value, field.name):
+                data[field.name] = getattr(value, field.name)
     return request_type(**data)

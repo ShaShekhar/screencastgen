@@ -30,6 +30,7 @@ from .pipelines.common import (
 from .pipelines.highlight import parse_resolution as _parse_resolution_impl
 from .pipelines.highlight import run_highlight_pipeline as _run_highlight_pipeline_impl
 from .pipelines.lipsync import run_lipsync_pipeline as _run_lipsync_pipeline_impl
+from .pipelines.visualization import run_visualization_pipeline as _run_visualization_pipeline_impl
 
 
 def _add_common_args(p: argparse.ArgumentParser) -> None:
@@ -87,6 +88,58 @@ def _add_video_args(p: argparse.ArgumentParser) -> None:
         help=f"Video resolution WxH (default: {DEFAULT_VIDEO_WIDTH}x{DEFAULT_VIDEO_HEIGHT})",
     )
     p.add_argument("--fps", type=int, default=DEFAULT_VIDEO_FPS, help=f"Frame rate (default: {DEFAULT_VIDEO_FPS})")
+
+
+def _add_visualization_args(p: argparse.ArgumentParser) -> None:
+    """Add arguments for generated math visualization rendering."""
+    from .providers.visualization import get_default_renderer_name, get_renderer_names
+
+    p.add_argument("--prompt", required=True, help="Concept prompt to visualize")
+    p.add_argument(
+        "-o",
+        "--output",
+        help="Output MP4 filename inside --output-dir (default: visualization.mp4)",
+    )
+    p.add_argument(
+        "--output-dir",
+        default=DEFAULT_OUTPUT_DIR,
+        help=f"Directory for generated source and render output (default: {DEFAULT_OUTPUT_DIR})",
+    )
+    p.add_argument(
+        "--renderer",
+        "--provider",
+        dest="provider",
+        default=get_default_renderer_name(),
+        choices=get_renderer_names(),
+        help="Visualization renderer provider",
+    )
+    p.add_argument(
+        "--duration",
+        "--duration-seconds",
+        dest="duration_seconds",
+        type=int,
+        default=30,
+        help="Target animation duration in seconds (default: 30)",
+    )
+    p.add_argument(
+        "--resolution",
+        default=f"{DEFAULT_VIDEO_WIDTH}x{DEFAULT_VIDEO_HEIGHT}",
+        help=f"Video resolution WxH (default: {DEFAULT_VIDEO_WIDTH}x{DEFAULT_VIDEO_HEIGHT})",
+    )
+    p.add_argument("--fps", type=int, default=DEFAULT_VIDEO_FPS, help=f"Frame rate (default: {DEFAULT_VIDEO_FPS})")
+    p.add_argument(
+        "--style",
+        default="clean",
+        choices=["clean", "chalkboard", "blueprint", "minimal"],
+        help="Visual style preset (default: clean)",
+    )
+    p.add_argument(
+        "--audience-level",
+        default="general",
+        help="Audience level used in generated scene labels (default: general)",
+    )
+    p.add_argument("--timeout", dest="timeout_seconds", type=int, default=300, help="Render timeout in seconds")
+    p.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
 
 def _add_provider_args(p: argparse.ArgumentParser, *, include_lipsync: bool = False) -> None:
@@ -164,7 +217,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--face-scale",
         type=float,
         default=0.22,
-        help="Relative face width for corner-overlay layouts (default: 0.22)",
+        help="Relative face width for docked corner layouts (default: 0.22)",
     )
     ls_p.add_argument(
         "--latentsync-preset",
@@ -172,6 +225,9 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["small", "quality"],
         help="LatentSync preset: small (256) or quality (512) (default: quality)",
     )
+
+    viz_p = sub.add_parser("visualize", help="Create a generated educational math animation")
+    _add_visualization_args(viz_p)
 
     from .models import register_model_download_args
 
@@ -243,6 +299,10 @@ def run_lipsync_pipeline(args) -> int:
     return _run_lipsync_pipeline_impl(args, backend_factory=_create_tts_backend).exit_code
 
 
+def run_visualization_pipeline(args) -> int:
+    return _run_visualization_pipeline_impl(args).exit_code
+
+
 def run_download_models(args) -> int:
     """Download ML model weights."""
     from .models import download_selected_models
@@ -273,6 +333,7 @@ def main(argv=None) -> int:
         "audio": run_audio_pipeline,
         "highlight": run_highlight_pipeline,
         "lipsync": run_lipsync_pipeline,
+        "visualize": run_visualization_pipeline,
         "download-models": run_download_models,
     }
 

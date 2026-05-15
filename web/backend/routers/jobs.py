@@ -27,6 +27,11 @@ def _build_config(req: JobCreateRequest) -> dict:
         cfg["ref_audio_file_id"] = str(cfg["ref_audio_file_id"])
         cfg["ref_video_file_id"] = str(cfg["ref_video_file_id"])
         return cfg
+    elif req.pipeline_type == "visualization" and req.visualization_config:
+        cfg = req.visualization_config.model_dump()
+        if cfg.get("iteration_of_job_id") is not None:
+            cfg["iteration_of_job_id"] = str(cfg["iteration_of_job_id"])
+        return cfg
     # Use defaults
     return {}
 
@@ -34,9 +39,15 @@ def _build_config(req: JobCreateRequest) -> dict:
 @router.post("/jobs", response_model=JobResponse)
 async def create_job(req: JobCreateRequest):
     async with async_session_factory() as session:
-        uploaded = await session.get(UploadedFile, req.uploaded_file_id)
-        if not uploaded:
-            raise HTTPException(404, "Uploaded file not found")
+        try:
+            pipeline_type = PipelineType(req.pipeline_type)
+        except ValueError as exc:
+            raise HTTPException(400, f"Unknown pipeline type: {req.pipeline_type}") from exc
+
+        if pipeline_type != PipelineType.visualization:
+            uploaded = await session.get(UploadedFile, req.uploaded_file_id)
+            if not uploaded:
+                raise HTTPException(404, "Uploaded file not found")
 
         ref_audio_id = None
         ref_video_id = None
@@ -57,7 +68,7 @@ async def create_job(req: JobCreateRequest):
         config = _build_config(req)
 
         job = Job(
-            pipeline_type=PipelineType(req.pipeline_type),
+            pipeline_type=pipeline_type,
             status=JobStatus.pending,
             config_json=config,
             uploaded_file_id=req.uploaded_file_id,

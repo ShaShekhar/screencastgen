@@ -22,7 +22,7 @@ const LIPSYNC_PROVIDERS = [
   { value: "wav2lip", label: "Wav2Lip" },
 ];
 const LATENTSYNC_PRESETS = [
-  { value: "small", label: "Small Overlay (Recommended)" },
+  { value: "small", label: "Small Docked (Recommended)" },
   { value: "quality", label: "Higher Quality" },
 ];
 
@@ -121,13 +121,13 @@ export default function LipsyncSettings({ config, onChange }: Props) {
           ))}
         </select>
         <p className="mt-1 text-xs text-gray-500">
-          Use `small` for Loom-style corner overlays. `quality` keeps the 512 pipeline.
+          Use `small` for corner-docked presenter videos. `quality` keeps the 512 pipeline.
         </p>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Overlay Scale
+          Presenter Scale
         </label>
         <input
           type="range"
@@ -141,7 +141,7 @@ export default function LipsyncSettings({ config, onChange }: Props) {
           className="w-full"
         />
         <p className="mt-1 text-xs text-gray-500">
-          {Math.round(config.face_scale * 100)}% of frame width for corner overlays.
+          {Math.round(config.face_scale * 100)}% of frame width for docked corner layouts.
         </p>
       </div>
 

@@ -23,16 +23,17 @@ from screencastgen.pipelines import PipelineReporter
 from screencastgen.pipelines.audio import run_audio_pipeline
 from screencastgen.pipelines.highlight import run_highlight_pipeline
 from screencastgen.pipelines.lipsync import run_lipsync_pipeline
+from screencastgen.pipelines.visualization import run_visualization_pipeline
 from screencastgen.pipelines.types import (
     AudioPipelineRequest,
     HighlightPipelineRequest,
     LipsyncPipelineRequest,
+    VisualizationPipelineRequest,
 )
 
 from .celery_app import celery_app
 from .progress import JobProgressReporter
 from ..config import settings
-from ..database import get_sync_session
 from ..models import Job, JobStatus, UploadedFile
 from ..services.storage import get_upload_abs_path, get_output_dir, upload_output
 
@@ -211,9 +212,55 @@ def _build_lipsync_request(
     )
 
 
+def _build_visualization_request(job: Job, output_dir: str) -> VisualizationPipelineRequest:
+    cfg = job.config_json or {}
+    output_filename = "visualization.mp4"
+
+    return VisualizationPipelineRequest(
+        prompt=cfg.get("prompt", ""),
+        output=cfg.get("output") or output_filename,
+        output_dir=output_dir,
+        provider=cfg.get("provider", "manimgl"),
+        duration_seconds=int(cfg.get("duration_seconds", 30)),
+        resolution=f"{cfg.get('width', DEFAULT_VIDEO_WIDTH)}x{cfg.get('height', DEFAULT_VIDEO_HEIGHT)}",
+        fps=int(cfg.get("fps", DEFAULT_VIDEO_FPS)),
+        style=cfg.get("style", "clean"),
+        audience_level=cfg.get("audience_level", "general"),
+        iteration_of_job_id=cfg.get("iteration_of_job_id"),
+        clean=False,
+        verbose=True,
+    )
+
+
+def _build_pipeline_dispatch(
+    job: Job,
+    pdf_path: Optional[str],
+    output_dir: str,
+    db_session,
+):
+    pipeline_type = job.pipeline_type.value
+    if pipeline_type == "audio":
+        if not pdf_path:
+            raise ValueError("Uploaded file path is required for audio jobs")
+        return _build_audio_request(job, pdf_path, output_dir), run_audio_pipeline
+    if pipeline_type == "highlight":
+        if not pdf_path:
+            raise ValueError("Uploaded file path is required for highlight jobs")
+        return _build_highlight_request(job, pdf_path, output_dir, db_session), run_highlight_pipeline
+    if pipeline_type == "lipsync":
+        if not pdf_path:
+            raise ValueError("Uploaded file path is required for lipsync jobs")
+        return _build_lipsync_request(job, pdf_path, output_dir, db_session), run_lipsync_pipeline
+    if pipeline_type == "visualization":
+        return _build_visualization_request(job, output_dir), run_visualization_pipeline
+    raise ValueError(f"Unknown pipeline type: {pipeline_type}")
+
+
 @celery_app.task(bind=True, max_retries=0)
 def run_pipeline_task(self, job_id: str):
     """Execute the appropriate screencastgen pipeline for a job."""
+    from ..database import get_sync_session
+
     logger.info("Starting pipeline task for job %s", job_id)
     db_session = get_sync_session()
 
@@ -227,31 +274,26 @@ def run_pipeline_task(self, job_id: str):
         job.celery_task_id = self.request.id
         db_session.commit()
 
-        uploaded_file = db_session.get(UploadedFile, job.uploaded_file_id)
-        if not uploaded_file:
-            job.status = JobStatus.failed
-            job.error_message = "Uploaded file record not found"
-            db_session.commit()
-            return {"error": "File not found"}
-
-        pdf_path = get_upload_abs_path(uploaded_file.stored_path)
+        pdf_path = None
+        if job.pipeline_type.value != "visualization":
+            uploaded_file = db_session.get(UploadedFile, job.uploaded_file_id)
+            if not uploaded_file:
+                job.status = JobStatus.failed
+                job.error_message = "Uploaded file record not found"
+                db_session.commit()
+                return {"error": "File not found"}
+            pdf_path = get_upload_abs_path(uploaded_file.stored_path)
         output_dir = get_output_dir(uuid.UUID(job_id))
 
-        pipeline_type = job.pipeline_type.value
-        if pipeline_type == "audio":
-            request = _build_audio_request(job, pdf_path, output_dir)
-            pipeline_func = run_audio_pipeline
-        elif pipeline_type == "highlight":
-            request = _build_highlight_request(job, pdf_path, output_dir, db_session)
-            pipeline_func = run_highlight_pipeline
-        elif pipeline_type == "lipsync":
-            request = _build_lipsync_request(job, pdf_path, output_dir, db_session)
-            pipeline_func = run_lipsync_pipeline
-        else:
+        try:
+            request, pipeline_func = _build_pipeline_dispatch(job, pdf_path, output_dir, db_session)
+        except ValueError as exc:
             job.status = JobStatus.failed
-            job.error_message = f"Unknown pipeline type: {pipeline_type}"
+            job.error_message = str(exc)
             db_session.commit()
-            return {"error": "Unknown pipeline"}
+            return {"error": str(exc)}
+
+        pipeline_type = job.pipeline_type.value
 
         progress = JobProgressReporter(job_id=job_id, db_session=db_session)
         reporter = PipelineReporter(stream=sys.stdout, on_event=progress.handle_event)
@@ -262,10 +304,21 @@ def run_pipeline_task(self, job_id: str):
         )
         try:
             result = pipeline_func(request, reporter=reporter)
+            if result.metadata:
+                cfg = dict(job.config_json or {})
+                cfg["visualization_result" if pipeline_type == "visualization" else "pipeline_result"] = result.metadata
+                job.config_json = cfg
             if result.exit_code == 0 and result.output_path and os.path.isfile(result.output_path):
                 upload_output(uuid.UUID(job_id), result.output_name)
                 if pipeline_type == "highlight":
                     _upload_reader_assets(uuid.UUID(job_id), output_dir)
+                if pipeline_type == "visualization":
+                    for rel in ("generated_visualization.py", "visualization_metadata.json"):
+                        if os.path.isfile(os.path.join(output_dir, rel)):
+                            try:
+                                upload_output(uuid.UUID(job_id), rel)
+                            except Exception as exc:
+                                logger.warning("Visualization artefact upload failed for %s: %s", rel, exc)
                 job.status = JobStatus.completed
                 job.progress_phase = "done"
                 job.error_message = None

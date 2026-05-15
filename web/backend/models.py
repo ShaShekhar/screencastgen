@@ -17,6 +17,7 @@ class PipelineType(str, enum.Enum):
     audio = "audio"
     highlight = "highlight"
     lipsync = "lipsync"
+    visualization = "visualization"
 
 
 class JobStatus(str, enum.Enum):
@@ -52,7 +53,7 @@ class Job(Base):
 
     config_json: Mapped[dict] = mapped_column(JSONB, default=dict)
 
-    uploaded_file_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("uploaded_files.id"))
+    uploaded_file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("uploaded_files.id"), nullable=True)
     ref_audio_file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("uploaded_files.id"), nullable=True)
     ref_video_file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("uploaded_files.id"), nullable=True)
 
@@ -66,6 +67,6 @@ class Job(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    uploaded_file: Mapped[UploadedFile] = relationship("UploadedFile", foreign_keys=[uploaded_file_id])
+    uploaded_file: Mapped[UploadedFile | None] = relationship("UploadedFile", foreign_keys=[uploaded_file_id])
     ref_audio_file: Mapped[UploadedFile | None] = relationship("UploadedFile", foreign_keys=[ref_audio_file_id])
     ref_video_file: Mapped[UploadedFile | None] = relationship("UploadedFile", foreign_keys=[ref_video_file_id])

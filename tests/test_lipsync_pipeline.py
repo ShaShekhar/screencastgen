@@ -298,9 +298,18 @@ class TestComposeLipsyncVideoMocked:
 
         assert result == output_path
 
-    def test_corner_overlay_layout_uses_scale(self, sample_aligned_chunks, tmp_path):
-        """Corner overlays should use the requested scale instead of split layout."""
-        renderer = HighlightRenderer(width=1280, height=720, font_size=24)
+    def test_corner_layout_uses_scale_and_reserves_reading_pane(self, sample_aligned_chunks, tmp_path):
+        """Corner layouts should size the face and keep text out from under it."""
+        class TrackingRenderer(HighlightRenderer):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.layout_sizes = []
+
+            def layout_words(self, words):
+                self.layout_sizes.append((self.width, self.height))
+                return super().layout_words(words)
+
+        renderer = TrackingRenderer(width=1280, height=720, font_size=24)
         output_path = str(tmp_path / "lipsync_corner.mp4")
 
         lipsync_clips = []
@@ -330,6 +339,8 @@ class TestComposeLipsyncVideoMocked:
             )
 
         mock_face_clip.resized.assert_called_with((256, 256))
+        assert renderer.layout_sizes
+        assert all(size == (982, 720) for size in renderer.layout_sizes)
 
     def test_empty_chunks_raises(self, tmp_path):
         """compose_lipsync_video should raise with empty input."""

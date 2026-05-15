@@ -25,6 +25,34 @@ def _get_audio_duration(audio_path: str) -> float:
     return float(result.stdout.strip())
 
 
+def _renderer_layout(renderer, words, width: int, height: int) -> list:
+    """Lay out words with a temporary renderer size."""
+    orig_width = renderer.width
+    orig_height = renderer.height
+    renderer.width = width
+    renderer.height = height
+    try:
+        return renderer.layout_words(words)
+    finally:
+        renderer.width = orig_width
+        renderer.height = orig_height
+
+
+def _render_renderer_frame(renderer, words, layout, active_time: float, width: int, height: int):
+    """Render one frame with a temporary renderer size."""
+    orig_width = renderer.width
+    orig_height = renderer.height
+    renderer.width = width
+    renderer.height = height
+    try:
+        active_idx = renderer.get_active_word_index(words, active_time)
+        scroll = renderer.compute_scroll_offset(layout, active_idx)
+        return renderer.render_frame(layout, active_idx, scroll)
+    finally:
+        renderer.width = orig_width
+        renderer.height = orig_height
+
+
 def compose_highlight_video(
     aligned_chunks: List[AlignedChunk],
     renderer,
@@ -41,12 +69,17 @@ def compose_highlight_video(
 
     for ac in aligned_chunks:
         duration = _get_audio_duration(ac.audio_path)
-        layout = renderer.layout_words(ac.words)
+        layout = _renderer_layout(renderer, ac.words, renderer.width, renderer.height)
 
         def make_frame(t, _ac=ac, _layout=layout):
-            active_idx = renderer.get_active_word_index(_ac.words, t)
-            scroll = renderer.compute_scroll_offset(_layout, active_idx)
-            img = renderer.render_frame(_layout, active_idx, scroll)
+            img = _render_renderer_frame(
+                renderer,
+                _ac.words,
+                _layout,
+                t,
+                renderer.width,
+                renderer.height,
+            )
             return np.array(img)
 
         video_clip = VideoClip(make_frame, duration=duration).with_fps(fps)
@@ -83,7 +116,8 @@ def compose_lipsync_video(
     - left: face on left half, text on right half
     - right: text on left half, face on right half
     - center: face centered top, text below
-    - top-left/top-right/bottom-left/bottom-right: presenter overlay in corner
+    - top-left/top-right/bottom-left/bottom-right: presenter docked in corner
+      with the text/page rendered in the remaining reading pane
     """
     from moviepy import (
         AudioFileClip,
@@ -101,34 +135,6 @@ def compose_lipsync_video(
 
     for ac, lipsync_path in zip(aligned_chunks, lipsync_clips):
         duration = _get_audio_duration(ac.audio_path)
-
-        if face_position in overlay_positions:
-            text_w = frame_w
-            text_renderer_width = text_w
-        elif face_position in ("left", "right"):
-            # Text area is half the frame for left/right layouts
-            text_w = frame_w // 2
-            text_renderer_width = text_w
-        else:  # center
-            text_w = frame_w
-            text_renderer_width = text_w
-
-        # Adjust renderer width for text area
-        orig_width = renderer.width
-        renderer.width = text_renderer_width
-        layout = renderer.layout_words(ac.words)
-        renderer.width = orig_width
-
-        def make_text_frame(t, _ac=ac, _layout=layout, _tw=text_renderer_width):
-            active_idx = renderer.get_active_word_index(_ac.words, t)
-            scroll = renderer.compute_scroll_offset(_layout, active_idx)
-            orig_w = renderer.width
-            renderer.width = _tw
-            img = renderer.render_frame(_layout, active_idx, scroll)
-            renderer.width = orig_w
-            return np.array(img)
-
-        text_clip = VideoClip(make_text_frame, duration=duration).with_fps(fps)
 
         # Load lip-sync face video
         face_clip = VideoFileClip(lipsync_path)
@@ -152,6 +158,27 @@ def compose_lipsync_video(
             face_h = frame_h // 2
         face_clip = face_clip.resized((face_w, face_h))
 
+        if face_position in overlay_positions:
+            # Corner presenters are docked into a side rail.  The reading pane
+            # takes the rest of the frame so the presenter never hides text.
+            rail_w = min(frame_w - 1, face_w + (overlay_margin * 2))
+            text_w = max(1, frame_w - rail_w)
+            text_h = frame_h
+        elif face_position in ("left", "right"):
+            text_w = frame_w // 2
+            text_h = frame_h
+        else:  # center
+            text_w = frame_w
+            text_h = max(1, frame_h - face_h)
+
+        layout = _renderer_layout(renderer, ac.words, text_w, text_h)
+
+        def make_text_frame(t, _ac=ac, _layout=layout, _tw=text_w, _th=text_h):
+            img = _render_renderer_frame(renderer, _ac.words, _layout, t, _tw, _th)
+            return np.array(img)
+
+        text_clip = VideoClip(make_text_frame, duration=duration).with_fps(fps)
+
         # Position clips
         if face_position == "left":
             face_clip = face_clip.with_position((0, 0))
@@ -165,13 +192,11 @@ def compose_lipsync_video(
         else:
             x = overlay_margin if face_position.endswith("left") else frame_w - face_w - overlay_margin
             y = overlay_margin if face_position.startswith("top") else frame_h - face_h - overlay_margin
-            text_clip = text_clip.with_position((0, 0))
+            text_x = frame_w - text_w if face_position.endswith("left") else 0
+            text_clip = text_clip.with_position((text_x, 0))
             face_clip = face_clip.with_position((x, y))
 
-        if face_position in overlay_positions:
-            layers = [text_clip, face_clip]
-        else:
-            layers = [face_clip, text_clip]
+        layers = [face_clip, text_clip] if face_position == "left" else [text_clip, face_clip]
 
         composite = CompositeVideoClip(
             layers,

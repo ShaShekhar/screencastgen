@@ -12,6 +12,7 @@ const PIPELINE_LABELS: Record<string, string> = {
   audio: "Audio",
   highlight: "Highlight Text Audio",
   lipsync: "Lip-Sync Video",
+  visualization: "Concept Visualization",
 };
 
 export default function JobCard({ job }: { job: Job }) {
@@ -39,7 +40,9 @@ export default function JobCard({ job }: { job: Job }) {
       </div>
 
       <p className="text-sm text-gray-700 truncate mb-2">
-        Job {job.id.slice(0, 8)}...
+        {job.pipeline_type === "visualization" && typeof job.config_json.prompt === "string"
+          ? job.config_json.prompt
+          : `Job ${job.id.slice(0, 8)}...`}
       </p>
 
       {job.status === "running" && (

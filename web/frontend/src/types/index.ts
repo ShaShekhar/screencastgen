@@ -6,7 +6,7 @@ export interface UploadedFile {
   ref_text?: string | null;
 }
 
-export type PipelineType = "audio" | "highlight" | "lipsync";
+export type PipelineType = "audio" | "highlight" | "lipsync" | "visualization";
 export type JobStatus = "pending" | "running" | "completed" | "failed";
 
 export interface Job {
@@ -18,7 +18,7 @@ export interface Job {
   progress_phase: string;
   error_message: string | null;
   config_json: Record<string, unknown>;
-  uploaded_file_id: string;
+  uploaded_file_id: string | null;
   ref_audio_file_id: string | null;
   ref_video_file_id: string | null;
   output_path: string | null;
@@ -89,6 +89,18 @@ export interface LipsyncConfig {
   fps: number;
 }
 
+export interface VisualizationConfig {
+  prompt: string;
+  provider: "manimgl" | "manimce";
+  duration_seconds: number;
+  width: number;
+  height: number;
+  fps: number;
+  style: "clean" | "chalkboard" | "blueprint" | "minimal";
+  audience_level: string;
+  iteration_of_job_id?: string | null;
+}
+
 export interface ReaderWord {
   word: string;
   start: number;
@@ -127,8 +139,9 @@ export interface ReaderStatus {
 
 export interface JobCreateRequest {
   pipeline_type: PipelineType;
-  uploaded_file_id: string;
+  uploaded_file_id?: string | null;
   audio_config?: AudioConfig;
   highlight_config?: HighlightConfig;
   lipsync_config?: LipsyncConfig;
+  visualization_config?: VisualizationConfig;
 }
