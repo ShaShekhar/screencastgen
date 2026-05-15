@@ -76,7 +76,11 @@ def allow_unsafe_torch_load() -> Iterator[None]:
     We patch ``torch.load`` only while WhisperX is loading those checkpoints
     and override any explicit ``weights_only=True`` passed by downstream code.
     """
-    import torch
+    try:
+        import torch
+    except Exception:
+        yield
+        return
 
     global _PATCH_DEPTH, _ORIGINAL_TORCH_LOAD
 

@@ -26,11 +26,14 @@ pip install -e ".[f5]"
 # GPU inference server (for CPU/GPU VM split)
 pip install -e ".[server]"
 
+# Web backend API/worker dependencies
+pip install -e ".[web]"
+
 # Cloud storage backends (optional, for web app)
 pip install -e ".[gcs]"             # Google Cloud Storage
 pip install -e ".[s3]"              # Amazon S3
 
-# Everything
+# Everything, including web backend deps
 pip install -e ".[all]"
 ```
 
