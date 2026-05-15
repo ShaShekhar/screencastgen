@@ -1,5 +1,7 @@
 """F5-TTS backend shim and backend spec."""
 
+import importlib.util
+
 from .base import BackendSpec
 from screencastgen.tts_clone import F5TTSBackend  # noqa: F401
 
@@ -39,5 +41,5 @@ SPEC = BackendSpec(
     capabilities=frozenset({"local", "voice_clone", "requires_ref_audio"}),
     build_kwargs=_build_kwargs,
     validate=_validate,
-    download_models=_download_models,
+    download_models=_download_models if importlib.util.find_spec("f5_tts") else None,
 )

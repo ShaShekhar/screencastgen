@@ -6,7 +6,6 @@ pydub>=0.25
 
 # Local TTS backends and GPU runtime
 qwen-tts>=0.1
-f5-tts>=1.0
 torch~=2.8.0
 torchaudio~=2.8.0
 torchcodec>=0.6,<0.8
@@ -33,3 +32,5 @@ python-multipart>=0.0.6
 #   Install it from its repo when using the lip-sync pipeline:
 #   https://github.com/bytedance/LatentSync
 # - Wav2Lip is optional and only needed when using --lipsync-provider wav2lip.
+# - F5-TTS is optional and not included in this default stack because its
+#   Python 3.10 NumPy cap conflicts with current WhisperX releases.
