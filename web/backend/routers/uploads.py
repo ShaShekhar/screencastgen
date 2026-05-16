@@ -20,7 +20,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["uploads"])
 
-PREVIEW_EXTENSIONS = {".pdf", ".txt", ".epub"}
+PREVIEW_EXTENSIONS = {
+    ".pdf",
+    ".txt",
+    ".epub",
+    ".mp4",
+    ".mov",
+    ".m4v",
+    ".webm",
+    ".ogg",
+    ".ogv",
+}
 
 
 def _looks_like_audio(filename: str, content_type: str) -> bool:
@@ -96,8 +106,11 @@ async def preview_upload(file_id: uuid.UUID):
             raise HTTPException(404, "Uploaded file not found")
 
     ext = os.path.splitext(uploaded.original_name)[1].lower()
-    if ext not in PREVIEW_EXTENSIONS:
-        raise HTTPException(400, "Preview is only available for PDF, TXT, and EPUB uploads")
+    if ext not in PREVIEW_EXTENSIONS and not uploaded.content_type.startswith("video/"):
+        raise HTTPException(
+            400,
+            "Preview is only available for PDF, TXT, EPUB, and video uploads",
+        )
 
     try:
         local_path = get_upload_abs_path(uploaded.stored_path)

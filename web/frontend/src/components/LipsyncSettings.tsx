@@ -1,13 +1,13 @@
 import { useState } from "react";
 import FileUploader from "./FileUploader";
-import { LipsyncConfig, UploadedFile } from "../types";
+import type { LipsyncConfig, UploadedFile } from "../types";
 
 interface Props {
   config: LipsyncConfig;
   onChange: (c: LipsyncConfig) => void;
 }
 
-const FACE_POSITIONS = [
+export const FACE_POSITIONS = [
   { value: "bottom-right", label: "Bottom Right" },
   { value: "top-right", label: "Top Right" },
   { value: "bottom-left", label: "Bottom Left" },
@@ -105,20 +105,19 @@ export default function LipsyncSettings({ config, onChange }: Props) {
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Face Position
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <select
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          value={config.face_position}
+          onChange={(e) =>
+            onChange({ ...config, face_position: e.target.value })
+          }
+        >
           {FACE_POSITIONS.map((pos) => (
-            <label key={pos.value} className="flex items-center gap-1.5 text-sm">
-              <input
-                type="radio"
-                name="face_position"
-                value={pos.value}
-                checked={config.face_position === pos.value}
-                onChange={() => onChange({ ...config, face_position: pos.value })}
-              />
+            <option key={pos.value} value={pos.value}>
               {pos.label}
-            </label>
+            </option>
           ))}
-        </div>
+        </select>
       </div>
 
       <div>

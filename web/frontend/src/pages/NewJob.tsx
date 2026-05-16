@@ -165,7 +165,7 @@ export default function NewJob() {
                 }
               />
               <LipsyncPreviewFrame
-                uploadedFileId={uploadedFile?.id}
+                uploadedFile={uploadedFile}
                 config={lipsyncConfig}
               />
             </div>
