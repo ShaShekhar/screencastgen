@@ -18,6 +18,7 @@ from .types import AlignedChunk
 
 MANIFEST_NAME = "reader_manifest.json"
 AUDIO_NAME = "reader_audio.mp3"
+PRESENTER_NAME = "presenter.mp4"
 PAGES_DIR = "pages"
 PAGE_IMAGE_WIDTH = 1400  # pixels; fits desktop readers and downscales on mobile
 
@@ -101,8 +102,12 @@ def build_reader_assets(
     pdf_path: str,
     title: str,
     language: str = "en",
+    presenter: Optional[str] = None,
 ) -> Optional[str]:
     """Write reader manifest, concatenated audio, and (for PDF) page images.
+
+    ``presenter`` is the filename of a talking-head video synced to the same
+    timeline (lip-sync jobs); ``None`` for audio-only highlight jobs.
 
     Returns the manifest path on success, ``None`` if no chunks were available
     to render.
@@ -154,6 +159,7 @@ def build_reader_assets(
         "source_type": source_ext,
         "duration": round(total_duration, 3),
         "audio": AUDIO_NAME,
+        "presenter": presenter,
         "pages": (
             {
                 "dir": PAGES_DIR,
@@ -172,9 +178,14 @@ def build_reader_assets(
     return manifest_path
 
 
-def reader_asset_names(page_files: Optional[dict] = None) -> List[str]:
+def reader_asset_names(
+    page_files: Optional[dict] = None,
+    presenter: bool = False,
+) -> List[str]:
     """Return relative paths of every reader asset for upload helpers."""
     names = [MANIFEST_NAME, AUDIO_NAME]
+    if presenter:
+        names.append(PRESENTER_NAME)
     if page_files:
         for fname in page_files.values():
             names.append(f"{PAGES_DIR}/{fname}")

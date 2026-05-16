@@ -95,6 +95,13 @@ class ProcessingTracker:
     def is_epub_built(self) -> bool:
         return self.status.get("epub_built", False)
 
+    def mark_presenter_built(self) -> None:
+        self.status["presenter_built"] = True
+        self.save()
+
+    def is_presenter_built(self) -> bool:
+        return self.status.get("presenter_built", False)
+
     def get_summary(self) -> Dict:
         total = self.status["total_chunks"]
         processed = len(self.status["processed_chunks"])

@@ -160,3 +160,64 @@ async def download_job(job_id: UUID):
             raise HTTPException(400, str(exc)) from exc
         except FileNotFoundError:
             raise HTTPException(404, "Output file not found")
+
+
+@router.post("/jobs/{job_id}/export-mp4")
+async def export_lipsync_mp4(job_id: UUID):
+    """Trigger an on-demand baked-MP4 export for a completed lip-sync job."""
+    async with async_session_factory() as session:
+        job = await session.get(Job, job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        if job.pipeline_type != PipelineType.lipsync:
+            raise HTTPException(400, "MP4 export is only available for lip-sync jobs")
+        if job.status != JobStatus.completed:
+            raise HTTPException(400, "Job output not available")
+
+        cfg = dict(job.config_json or {})
+        if cfg.get("export_status") == "running":
+            return {"export_status": "running"}
+
+        cfg["export_status"] = "running"
+        cfg.pop("export_error", None)
+        cfg.pop("export_output", None)
+        job.config_json = cfg
+        await session.commit()
+
+        from ..tasks.pipelines import run_lipsync_export_task
+
+        run_lipsync_export_task.delay(str(job_id))
+        return {"export_status": "running"}
+
+
+@router.get("/jobs/{job_id}/export-mp4/status")
+async def export_lipsync_mp4_status(job_id: UUID):
+    async with async_session_factory() as session:
+        job = await session.get(Job, job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        cfg = job.config_json or {}
+        return {
+            "export_status": cfg.get("export_status"),
+            "export_output": cfg.get("export_output"),
+            "export_error": cfg.get("export_error"),
+        }
+
+
+@router.get("/jobs/{job_id}/export-mp4/download")
+async def export_lipsync_mp4_download(job_id: UUID):
+    async with async_session_factory() as session:
+        job = await session.get(Job, job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        cfg = job.config_json or {}
+        output = cfg.get("export_output")
+        if cfg.get("export_status") != "done" or not output:
+            raise HTTPException(400, "Exported MP4 not available")
+
+        try:
+            return get_download_response(job_id, output)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except FileNotFoundError:
+            raise HTTPException(404, "Exported file not found")

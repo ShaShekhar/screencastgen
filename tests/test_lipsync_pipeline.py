@@ -510,6 +510,124 @@ class TestLipsyncPipelineIntegration:
 
 
 # ===================================================================
+# Reader bundle output (separate presenter video + document)
+# ===================================================================
+
+class TestLipsyncReaderBundle:
+
+    def test_tracker_presenter_flag_persists(self, tmp_path):
+        """Tracker should record presenter-built state for resumability."""
+        from screencastgen.tracker import ProcessingTracker
+
+        status = str(tmp_path / "status.json")
+        tracker = ProcessingTracker(status)
+        assert not tracker.is_presenter_built()
+        tracker.mark_presenter_built()
+        assert tracker.is_presenter_built()
+
+        assert ProcessingTracker(status).is_presenter_built()
+
+    def test_build_reader_assets_includes_presenter_field(
+        self, sample_aligned_chunks, sample_pdf_simple, tmp_path
+    ):
+        """The reader manifest carries the presenter filename for lip-sync jobs."""
+        import json
+
+        pytest.importorskip("pydub", reason="pydub required for reader audio")
+        from screencastgen.reader_assets import (
+            MANIFEST_NAME,
+            PRESENTER_NAME,
+            build_reader_assets,
+        )
+
+        out = str(tmp_path / "reader")
+        os.makedirs(out, exist_ok=True)
+        try:
+            manifest_path = build_reader_assets(
+                aligned_chunks=sample_aligned_chunks,
+                output_dir=out,
+                pdf_path=sample_pdf_simple,
+                title="Test",
+                presenter=PRESENTER_NAME,
+            )
+        except Exception as exc:  # noqa: BLE001
+            pytest.skip(f"reader asset build needs ffmpeg/pydub: {exc}")
+
+        assert manifest_path and manifest_path.endswith(MANIFEST_NAME)
+        with open(manifest_path, "r", encoding="utf-8") as fh:
+            manifest = json.load(fh)
+        assert manifest["presenter"] == PRESENTER_NAME
+
+        # Highlight jobs (no presenter) leave the field null.
+        highlight_manifest = build_reader_assets(
+            aligned_chunks=sample_aligned_chunks,
+            output_dir=out,
+            pdf_path=sample_pdf_simple,
+            title="Test",
+        )
+        with open(highlight_manifest, "r", encoding="utf-8") as fh:
+            assert json.load(fh)["presenter"] is None
+
+    def test_reader_format_dispatches_to_build_lipsync_reader(
+        self, sample_pdf_simple, tmp_path
+    ):
+        """format='reader' routes the pipeline to the reader-bundle builder."""
+        from screencastgen.cli import run_lipsync_pipeline
+        from screencastgen.pipelines.types import PipelineRunResult
+
+        ref_audio = str(tmp_path / "ref.wav")
+        _make_wav(ref_audio, duration_s=5.0)
+        ref_video = str(tmp_path / "face.mp4")
+        with open(ref_video, "wb") as f:
+            f.write(b"\x00" * 100)
+
+        args = make_lipsync_args(
+            sample_pdf_simple, tmp_path,
+            ref_audio=ref_audio, ref_video=ref_video,
+            format="reader",
+        )
+        mock_be = MockTTSBackend()
+        mock_words = [WordTiming("test", 0.0, 0.5)]
+
+        def fake_lipsync(audio_path, reference_video_path, output_path, device="cpu", **kwargs):
+            with open(output_path, "wb") as f:
+                f.write(b"\x00" * 100)
+            return output_path
+
+        mock_aligner = MagicMock()
+        mock_aligner.align_chunk = MagicMock(return_value=mock_words)
+        mock_lipsync_mod = MagicMock()
+        mock_lipsync_mod.generate_lipsync_video = MagicMock(side_effect=fake_lipsync)
+
+        captured = {}
+
+        def fake_build_reader(request, aligned_chunks, lipsync_clips, tracker, **kwargs):
+            captured["chunks"] = list(aligned_chunks)
+            captured["clips"] = list(lipsync_clips)
+            return PipelineRunResult(
+                exit_code=0,
+                output_name="reader_manifest.json",
+                output_path=str(tmp_path / "reader_manifest.json"),
+            )
+
+        with patch("screencastgen.cli._create_tts_backend", return_value=mock_be), \
+             patch.dict("sys.modules", {
+                 "screencastgen.aligner": mock_aligner,
+                 "screencastgen.lipsync": mock_lipsync_mod,
+             }), \
+             patch(
+                 "screencastgen.pipelines.lipsync.build_lipsync_reader",
+                 side_effect=fake_build_reader,
+             ) as mock_reader:
+            result = run_lipsync_pipeline(args)
+
+        assert result == 0
+        assert mock_reader.called
+        assert captured["chunks"], "reader builder received aligned chunks"
+        assert captured["clips"], "reader builder received lip-sync clips"
+
+
+# ===================================================================
 # Lipsync with Remote GPU (mocked)
 # ===================================================================
 

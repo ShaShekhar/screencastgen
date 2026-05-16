@@ -1,9 +1,19 @@
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  CSSProperties,
+  PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   getReaderAudioUrl,
   getReaderManifest,
   getReaderPageUrl,
+  getReaderPresenterUrl,
 } from "../api/reader";
 import { getDownloadUrl } from "../api/jobs";
 import { ReaderChunk, ReaderManifest } from "../types";
@@ -15,7 +25,47 @@ interface FlatWord {
   page: number;
 }
 
+type ThemeName = "night" | "pdf";
+
+interface ThemeColors {
+  bg: string;
+  fg: string;
+  surface: string;
+  border: string;
+  muted: string;
+  highlightBg: string;
+  highlightFg: string;
+  hover: string;
+}
+
+const THEMES: Record<ThemeName, ThemeColors> = {
+  night: {
+    bg: "#0b0b0c",
+    fg: "#e8e8ea",
+    surface: "#18181b",
+    border: "#2e2e33",
+    muted: "#9a9aa2",
+    highlightBg: "#facc15",
+    highlightFg: "#0b0b0c",
+    hover: "#27272a",
+  },
+  pdf: {
+    bg: "#f7f1e3",
+    fg: "#1f2937",
+    surface: "#fffaf0",
+    border: "#e8dcc2",
+    muted: "#8d7751",
+    highlightBg: "#fcd34d",
+    highlightFg: "#1f2937",
+    hover: "#fdf0d0",
+  },
+};
+
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2];
+const PIP_SIZES = [200, 280, 380];
+const THEME_KEY = "reader-theme";
+const PIP_POS_KEY = "reader-pip-pos";
+const PIP_SIZE_KEY = "reader-pip-size";
 
 function fmtTime(secs: number): string {
   if (!Number.isFinite(secs) || secs < 0) return "0:00";
@@ -44,6 +94,11 @@ function findActiveWordIndex(words: FlatWord[], t: number): number {
   return best;
 }
 
+function loadTheme(): ThemeName {
+  const stored = localStorage.getItem(THEME_KEY);
+  return stored === "pdf" ? "pdf" : "night";
+}
+
 export default function Reader() {
   const { id } = useParams<{ id: string }>();
   const [manifest, setManifest] = useState<ReaderManifest | null>(null);
@@ -57,13 +112,47 @@ export default function Reader() {
   const [controlsVisible, setControlsVisible] = useState(true);
   const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [theme, setTheme] = useState<ThemeName>(loadTheme);
+  const [invertPages, setInvertPages] = useState(false);
+  const [pipVisible, setPipVisible] = useState(true);
+  const [pipSizeIdx, setPipSizeIdx] = useState<number>(() => {
+    const stored = Number(localStorage.getItem(PIP_SIZE_KEY));
+    return Number.isInteger(stored) && stored >= 0 && stored < PIP_SIZES.length
+      ? stored
+      : 1;
+  });
+  const [pipPos, setPipPos] = useState<{ x: number; y: number }>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(PIP_POS_KEY) || "");
+      if (stored && typeof stored.x === "number" && typeof stored.y === "number") {
+        return stored;
+      }
+    } catch {
+      /* ignore */
+    }
+    return { x: 24, y: 80 };
+  });
+
+  const mediaRef = useRef<HTMLMediaElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollerRef = useRef<HTMLElement | null>(null);
   const scrollTargetRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasStartedPlayingRef = useRef(false);
+  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem(PIP_SIZE_KEY, String(pipSizeIdx));
+  }, [pipSizeIdx]);
+
+  useEffect(() => {
+    localStorage.setItem(PIP_POS_KEY, JSON.stringify(pipPos));
+  }, [pipPos]);
 
   useEffect(() => {
     if (!id) return;
@@ -82,7 +171,7 @@ export default function Reader() {
         if (!cancelled) {
           const msg =
             err?.response?.status === 404
-              ? "This job does not have a browser reader available. Re-run the highlight pipeline to generate one."
+              ? "This job does not have a browser reader available."
               : "Failed to load reader manifest.";
           setError(msg);
         }
@@ -95,6 +184,8 @@ export default function Reader() {
       cancelled = true;
     };
   }, [id]);
+
+  const hasPresenter = !!manifest?.presenter;
 
   const flatWords = useMemo(() => {
     if (!manifest) return [];
@@ -139,7 +230,7 @@ export default function Reader() {
   }, [activePage, id, manifest]);
 
   const handleTimeUpdate = useCallback(() => {
-    const el = audioRef.current;
+    const el = mediaRef.current;
     if (!el) return;
     const t = el.currentTime;
     setCurrentTime(t);
@@ -256,7 +347,7 @@ export default function Reader() {
 
   const seekToWord = useCallback(
     (idx: number) => {
-      const el = audioRef.current;
+      const el = mediaRef.current;
       const target = flatWords[idx];
       if (!el || !target) return;
       el.currentTime = Math.max(0, target.start - 0.02);
@@ -269,7 +360,7 @@ export default function Reader() {
   );
 
   const togglePlay = useCallback(() => {
-    const el = audioRef.current;
+    const el = mediaRef.current;
     if (!el) return;
     if (el.paused) {
       el.play().catch(() => undefined);
@@ -280,16 +371,59 @@ export default function Reader() {
 
   const handleRateChange = useCallback((next: number) => {
     setRate(next);
-    if (audioRef.current) audioRef.current.playbackRate = next;
+    if (mediaRef.current) mediaRef.current.playbackRate = next;
   }, []);
 
   const handleScrub = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    const el = audioRef.current;
+    const el = mediaRef.current;
     if (!el) return;
     const nextTime = Number(e.target.value);
     el.currentTime = nextTime;
     setCurrentTime(nextTime);
   }, []);
+
+  // -- PiP drag --------------------------------------------------------------
+  const onPipPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      dragRef.current = {
+        dx: e.clientX - pipPos.x,
+        dy: e.clientY - pipPos.y,
+      };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [pipPos],
+  );
+
+  const onPipPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const width = PIP_SIZES[pipSizeIdx];
+      const maxX = Math.max(0, window.innerWidth - width);
+      const maxY = Math.max(0, window.innerHeight - 80);
+      setPipPos({
+        x: Math.min(Math.max(0, e.clientX - drag.dx), maxX),
+        y: Math.min(Math.max(0, e.clientY - drag.dy), maxY),
+      });
+    },
+    [pipSizeIdx],
+  );
+
+  const onPipPointerUp = useCallback(() => {
+    dragRef.current = null;
+  }, []);
+
+  const colors = THEMES[theme];
+  const rootStyle = {
+    "--reader-bg": colors.bg,
+    "--reader-fg": colors.fg,
+    "--reader-surface": colors.surface,
+    "--reader-border": colors.border,
+    "--reader-muted": colors.muted,
+    "--reader-highlight-bg": colors.highlightBg,
+    "--reader-highlight-fg": colors.highlightFg,
+    "--reader-hover": colors.hover,
+  } as CSSProperties;
 
   const duration = manifest?.duration ?? 0;
 
@@ -317,13 +451,28 @@ export default function Reader() {
 
   let wordCounter = 0;
 
+  const mediaHandlers = {
+    onTimeUpdate: handleTimeUpdate,
+    onPlay: () => {
+      setPlaying(true);
+      if (!hasStartedPlayingRef.current) {
+        hasStartedPlayingRef.current = true;
+        setHasStartedPlaying(true);
+      }
+    },
+    onPause: () => setPlaying(false),
+  };
+
   return (
-    <div className="fixed inset-0 bg-[#f7f1e3] text-gray-900 flex flex-col">
-      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white/85 backdrop-blur">
+    <div
+      style={rootStyle}
+      className="fixed inset-0 flex flex-col bg-[var(--reader-bg)] text-[var(--reader-fg)]"
+    >
+      <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--reader-border)] bg-[var(--reader-surface)]">
         <div className="flex items-center gap-3 min-w-0">
           <Link
             to={id ? `/jobs/${id}` : "/"}
-            className="text-gray-500 hover:text-gray-900 text-sm shrink-0"
+            className="text-[var(--reader-muted)] hover:text-[var(--reader-fg)] text-sm shrink-0"
           >
             ← Back
           </Link>
@@ -331,14 +480,33 @@ export default function Reader() {
             {manifest.title}
           </h1>
         </div>
-        {id && (
-          <a
-            href={getDownloadUrl(id)}
-            className="text-sm text-blue-600 hover:underline shrink-0 ml-3"
+        <div className="flex items-center gap-3 shrink-0 ml-3">
+          <button
+            type="button"
+            onClick={() => setTheme((t) => (t === "night" ? "pdf" : "night"))}
+            className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] transition"
+            aria-label="Toggle theme"
           >
-            Download Output
-          </a>
-        )}
+            {theme === "night" ? "☾ Night" : "☀ PDF"}
+          </button>
+          {hasPresenter && !pipVisible && (
+            <button
+              type="button"
+              onClick={() => setPipVisible(true)}
+              className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] transition"
+            >
+              Show presenter
+            </button>
+          )}
+          {id && !hasPresenter && (
+            <a
+              href={getDownloadUrl(id)}
+              className="text-sm text-blue-500 hover:underline"
+            >
+              Download Output
+            </a>
+          )}
+        </div>
       </header>
 
       <main
@@ -353,14 +521,26 @@ export default function Reader() {
         >
           {activePageImage && (
             <aside className="hidden lg:block">
-              <div className="sticky top-6 rounded-3xl bg-[#fffaf0] border border-[#e8dcc2] shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b border-[#eadfca] text-xs uppercase tracking-[0.2em] text-[#8d7751]">
-                  Page {activePageImage.page}
+              <div className="sticky top-6 rounded-3xl bg-[var(--reader-surface)] border border-[var(--reader-border)] shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--reader-border)] text-xs uppercase tracking-[0.2em] text-[var(--reader-muted)]">
+                  <span>Page {activePageImage.page}</span>
+                  <button
+                    type="button"
+                    onClick={() => setInvertPages((v) => !v)}
+                    className="normal-case tracking-normal rounded border border-[var(--reader-border)] px-1.5 py-0.5 hover:bg-[var(--reader-hover)] transition"
+                  >
+                    {invertPages ? "Original" : "Invert"}
+                  </button>
                 </div>
                 <img
                   src={activePageImage.url}
                   alt={`Page ${activePageImage.page}`}
                   className="w-full h-auto block"
+                  style={
+                    invertPages
+                      ? { filter: "invert(1) hue-rotate(180deg)" }
+                      : undefined
+                  }
                 />
               </div>
             </aside>
@@ -378,14 +558,14 @@ export default function Reader() {
             {pages.map(({ page, chunks }) => (
               <section key={page} className="mb-10">
                 {page > 0 && (
-                  <div className="text-xs uppercase tracking-wider text-gray-400 mb-3">
+                  <div className="text-xs uppercase tracking-wider text-[var(--reader-muted)] mb-3">
                     Page {page}
                   </div>
                 )}
                 {chunks.map((chunk) => (
                   <p key={chunk.chunk_num} className="mb-5">
                     {chunk.words.length === 0 ? (
-                      <span className="text-gray-700">{chunk.text}</span>
+                      <span>{chunk.text}</span>
                     ) : (
                       chunk.words.map((w) => {
                         const idx = wordCounter++;
@@ -398,8 +578,8 @@ export default function Reader() {
                             className={
                               "cursor-pointer transition-colors rounded px-0.5 " +
                               (isActive
-                                ? "bg-amber-300 text-gray-900"
-                                : "hover:bg-amber-100")
+                                ? "bg-[var(--reader-highlight-bg)] text-[var(--reader-highlight-fg)]"
+                                : "hover:bg-[var(--reader-hover)]")
                             }
                           >
                             {w.word}{" "}
@@ -415,20 +595,69 @@ export default function Reader() {
         </div>
       </main>
 
-      <audio
-        ref={audioRef}
-        src={id ? getReaderAudioUrl(id) : undefined}
-        onTimeUpdate={handleTimeUpdate}
-        onPlay={() => {
-          setPlaying(true);
-          if (!hasStartedPlayingRef.current) {
-            hasStartedPlayingRef.current = true;
-            setHasStartedPlaying(true);
-          }
-        }}
-        onPause={() => setPlaying(false)}
-        preload="auto"
-      />
+      {hasPresenter ? (
+        <div
+          // Picture-in-picture presenter. Kept mounted at all times — it is the
+          // playback clock — and merely collapsed via `display:none` when hidden.
+          style={{
+            left: pipPos.x,
+            top: pipPos.y,
+            width: PIP_SIZES[pipSizeIdx],
+            display: pipVisible ? "block" : "none",
+          }}
+          className="fixed z-30 rounded-xl overflow-hidden border border-[var(--reader-border)] shadow-2xl bg-black"
+        >
+          <div
+            onPointerDown={onPipPointerDown}
+            onPointerMove={onPipPointerMove}
+            onPointerUp={onPipPointerUp}
+            className="flex items-center justify-between px-2 py-1 bg-[var(--reader-surface)] cursor-move select-none touch-none"
+          >
+            <span className="text-[10px] uppercase tracking-wider text-[var(--reader-muted)]">
+              Presenter
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setPipSizeIdx((i) => (i + 1) % PIP_SIZES.length)
+                }
+                className="text-[10px] rounded px-1 text-[var(--reader-muted)] hover:bg-[var(--reader-hover)]"
+                aria-label="Resize presenter"
+              >
+                ⤢
+              </button>
+              <button
+                type="button"
+                onClick={() => setPipVisible(false)}
+                className="text-[10px] rounded px-1 text-[var(--reader-muted)] hover:bg-[var(--reader-hover)]"
+                aria-label="Hide presenter"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <video
+            ref={(el) => {
+              mediaRef.current = el;
+            }}
+            src={id ? getReaderPresenterUrl(id) : undefined}
+            playsInline
+            preload="auto"
+            className="w-full block bg-black"
+            {...mediaHandlers}
+          />
+        </div>
+      ) : (
+        <audio
+          ref={(el) => {
+            mediaRef.current = el;
+          }}
+          src={id ? getReaderAudioUrl(id) : undefined}
+          preload="auto"
+          {...mediaHandlers}
+        />
+      )}
 
       <div
         className="absolute bottom-0 inset-x-0 z-20"
@@ -437,7 +666,7 @@ export default function Reader() {
       >
         <footer
           className={
-            "bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.15)] transform transition-all duration-300 ease-out " +
+            "bg-[var(--reader-surface)] border-t border-[var(--reader-border)] shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.35)] transform transition-all duration-300 ease-out " +
             (controlsVisible
               ? "translate-y-0 opacity-100"
               : "translate-y-full opacity-0 pointer-events-none")
@@ -450,7 +679,7 @@ export default function Reader() {
                   setAutoScroll(true);
                   togglePlay();
                 }}
-                className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-900 to-gray-700 text-white flex items-center justify-center shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-[transform,box-shadow] duration-150 shrink-0"
+                className="w-12 h-12 rounded-full bg-[var(--reader-fg)] text-[var(--reader-bg)] flex items-center justify-center shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-[transform,box-shadow] duration-150 shrink-0"
                 aria-label={playing ? "Pause" : "Play"}
               >
                 {playing ? (
@@ -464,7 +693,7 @@ export default function Reader() {
                   </svg>
                 )}
               </button>
-              <span className="text-xs text-gray-500 tabular-nums w-10 text-right">
+              <span className="text-xs text-[var(--reader-muted)] tabular-nums w-10 text-right">
                 {fmtTime(currentTime)}
               </span>
               <input
@@ -474,15 +703,15 @@ export default function Reader() {
                 step={0.1}
                 value={currentTime}
                 onChange={handleScrub}
-                className="flex-1 accent-gray-900"
+                className="flex-1 accent-[var(--reader-highlight-bg)]"
               />
-              <span className="text-xs text-gray-500 tabular-nums w-10">
+              <span className="text-xs text-[var(--reader-muted)] tabular-nums w-10">
                 {fmtTime(duration)}
               </span>
               <select
                 value={rate}
                 onChange={(e) => handleRateChange(Number(e.target.value))}
-                className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white shrink-0"
+                className="text-xs border border-[var(--reader-border)] rounded px-1 py-0.5 bg-[var(--reader-bg)] text-[var(--reader-fg)] shrink-0"
                 aria-label="Playback speed"
               >
                 {PLAYBACK_RATES.map((nextRate) => (
@@ -492,7 +721,7 @@ export default function Reader() {
                 ))}
               </select>
             </div>
-            <label className="flex items-center gap-2 text-xs text-gray-500 sm:self-end">
+            <label className="flex items-center gap-2 text-xs text-[var(--reader-muted)] sm:self-end">
               <input
                 type="checkbox"
                 checked={autoScroll}

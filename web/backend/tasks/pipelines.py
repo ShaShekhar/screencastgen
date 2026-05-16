@@ -42,10 +42,15 @@ logger = logging.getLogger(__name__)
 
 
 def _upload_reader_assets(job_id: uuid.UUID, output_dir: str) -> None:
-    """Best-effort upload of reader manifest/audio/page images to storage."""
-    from screencastgen.reader_assets import AUDIO_NAME, MANIFEST_NAME, PAGES_DIR
+    """Best-effort upload of reader manifest/audio/presenter/page images."""
+    from screencastgen.reader_assets import (
+        AUDIO_NAME,
+        MANIFEST_NAME,
+        PAGES_DIR,
+        PRESENTER_NAME,
+    )
 
-    candidates = [MANIFEST_NAME, AUDIO_NAME]
+    candidates = [MANIFEST_NAME, AUDIO_NAME, PRESENTER_NAME]
     pages_abs = os.path.join(output_dir, PAGES_DIR)
     if os.path.isdir(pages_abs):
         for name in sorted(os.listdir(pages_abs)):
@@ -169,9 +174,19 @@ def _build_lipsync_request(
     pdf_path: str,
     output_dir: str,
     db_session,
+    fmt: Optional[str] = None,
 ) -> LipsyncPipelineRequest:
     cfg = job.config_json or {}
-    output_filename = os.path.splitext(os.path.basename(pdf_path))[0] + "_lipsync.mp4"
+    fmt = fmt or cfg.get("format", "reader")
+    if fmt not in ("reader", "mp4", "epub"):
+        fmt = "reader"
+    stem = os.path.splitext(os.path.basename(pdf_path))[0]
+    if fmt == "mp4":
+        output_filename = stem + "_lipsync.mp4"
+    elif fmt == "epub":
+        output_filename = stem + "_lipsync.epub"
+    else:
+        output_filename = "reader_manifest.json"
 
     ref_audio_path = ""
     ref_text = cfg.get("ref_text")
@@ -197,7 +212,7 @@ def _build_lipsync_request(
     return LipsyncPipelineRequest(
         pdf=pdf_path,
         output=output_filename,
-        format="mp4",
+        format=fmt,
         output_dir=output_dir,
         backend=cfg.get("backend", "remote"),
         voice=cfg.get("voice"),
@@ -352,7 +367,7 @@ def run_pipeline_task(self, job_id: str):
                 job.config_json = cfg
             if result.exit_code == 0 and result.output_path and os.path.isfile(result.output_path):
                 upload_output(uuid.UUID(job_id), result.output_name)
-                if pipeline_type == "highlight":
+                if pipeline_type in ("highlight", "lipsync"):
                     _upload_reader_assets(uuid.UUID(job_id), output_dir)
                 if pipeline_type == "visualization":
                     for rel in ("generated_visualization.py", "visualization_metadata.json"):
@@ -392,5 +407,56 @@ def run_pipeline_task(self, job_id: str):
             progress.close()
 
         return {"status": job.status.value}
+    finally:
+        db_session.close()
+
+
+@celery_app.task(bind=True, max_retries=0)
+def run_lipsync_export_task(self, job_id: str):
+    """Bake a composited MP4 for a completed lip-sync job, on demand.
+
+    Re-runs the lip-sync pipeline in ``mp4`` mode against the job's existing
+    output directory. The TTS, alignment, and lip-sync steps are all skipped
+    (resumed from ``processing_status.json``); only compositing runs.
+    """
+    from ..database import get_sync_session
+
+    logger.info("Starting lipsync MP4 export for job %s", job_id)
+    db_session = get_sync_session()
+
+    def _set_export(job: Job, **fields) -> None:
+        cfg = dict(job.config_json or {})
+        cfg.update(fields)
+        job.config_json = cfg
+        db_session.commit()
+
+    try:
+        job = db_session.get(Job, uuid.UUID(job_id))
+        if not job or job.pipeline_type.value != "lipsync":
+            return {"error": "Not a lipsync job"}
+        if job.status != JobStatus.completed:
+            return {"error": "Job is not completed"}
+
+        _set_export(job, export_status="running", export_error=None)
+        try:
+            uploaded_file = db_session.get(UploadedFile, job.uploaded_file_id)
+            if not uploaded_file:
+                raise ValueError("Uploaded file record not found")
+            pdf_path = get_upload_abs_path(uploaded_file.stored_path)
+            output_dir = get_output_dir(uuid.UUID(job_id))
+            request = _build_lipsync_request(job, pdf_path, output_dir, db_session, fmt="mp4")
+            result = run_lipsync_pipeline(request)
+            if result.exit_code == 0 and result.output_path and os.path.isfile(result.output_path):
+                upload_output(uuid.UUID(job_id), result.output_name)
+                _set_export(job, export_status="done", export_output=result.output_name)
+                logger.info("Lipsync export complete for job %s -> %s", job_id, result.output_name)
+            else:
+                detail = result.error_message or f"Pipeline returned exit code {result.exit_code}"
+                _set_export(job, export_status="failed", export_error=detail)
+        except Exception as exc:
+            logger.exception("Lipsync export crashed for job %s", job_id)
+            _set_export(job, export_status="failed", export_error=str(exc))
+
+        return {"export_status": (job.config_json or {}).get("export_status")}
     finally:
         db_session.close()

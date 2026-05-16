@@ -18,3 +18,7 @@ export function getReaderAudioUrl(jobId: string): string {
 export function getReaderPageUrl(jobId: string, filename: string): string {
   return `/api/jobs/${jobId}/reader/pages/${filename}`;
 }
+
+export function getReaderPresenterUrl(jobId: string): string {
+  return `/api/jobs/${jobId}/reader/presenter`;
+}

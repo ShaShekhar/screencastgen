@@ -198,7 +198,13 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_video_args(ls_p)
     ls_p.add_argument("-o", "--output", help="Output filename (default: <pdf-stem>_lipsync.epub)")
     ls_p.add_argument("--ref-video", required=True, help="Reference face video clip (~10s)")
-    ls_p.add_argument("--format", default="epub", choices=["epub", "mp4"], help="Output format (default: epub)")
+    ls_p.add_argument(
+        "--format",
+        default="epub",
+        choices=["epub", "mp4", "reader"],
+        help="Output format: epub, mp4 (baked composite), or reader "
+        "(separate presenter video + document bundle) (default: epub)",
+    )
     ls_p.add_argument(
         "--face-position",
         default="bottom-right",

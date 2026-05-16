@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from ..concatenator import concatenate
 from ..constants import DEFAULT_BG_COLOR, DEFAULT_HIGHLIGHT_COLOR, DEFAULT_TEXT_COLOR, VIDEO_CHUNK_FILE_PATTERN
@@ -73,7 +75,7 @@ def run_lipsync_pipeline(
 
         page_map = None
         pdf_words = None
-        if fmt == "epub":
+        if fmt in ("epub", "reader"):
             chunks, page_map = extract_and_chunk_paged(
                 request,
                 tracker,
@@ -186,6 +188,8 @@ def run_lipsync_pipeline(
 
         if fmt == "epub":
             return build_lipsync_epub(request, aligned_chunks, lipsync_clips, tracker, reporter=reporter)
+        if fmt == "reader":
+            return build_lipsync_reader(request, aligned_chunks, lipsync_clips, tracker, reporter=reporter)
         return build_lipsync_mp4(request, aligned_chunks, lipsync_clips, pdf_words=pdf_words, reporter=reporter)
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -307,3 +311,142 @@ def build_lipsync_mp4(
     )
     reporter.line(f"\nDone: {dest}")
     return PipelineRunResult(exit_code=0, output_name=output_name, output_path=dest)
+
+
+def _normalize_presenter_chunk(src: str, dest: str, duration: float, fps: int) -> None:
+    """Re-encode *src* to a uniform fps/codec, trimmed to *duration* seconds.
+
+    Re-encoding (rather than a stream copy) is required so the concatenated
+    presenter video has frame-accurate chunk boundaries that line up with the
+    reader manifest's global word offsets.
+    """
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", src,
+            "-t", f"{duration:.3f}",
+            "-r", str(fps),
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-ar", "44100",
+            "-movflags", "+faststart",
+            dest,
+        ],
+        capture_output=True,
+        check=True,
+    )
+
+
+def _concat_presenter_chunks(files: List[str], dest: str) -> None:
+    """Concatenate uniformly-encoded presenter chunks via the ffmpeg demuxer."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as fh:
+        for path in files:
+            fh.write(f"file '{os.path.abspath(path)}'\n")
+        list_path = fh.name
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_path, "-c", "copy", dest],
+            capture_output=True,
+            check=True,
+        )
+    finally:
+        os.unlink(list_path)
+
+
+def _build_presenter_video(
+    aligned_chunks,
+    lipsync_clips,
+    output_dir: str,
+    fps: int,
+) -> str:
+    """Concatenate the per-chunk lip-sync clips into a single presenter video.
+
+    Each clip is normalised to its exact chunk-audio duration first so the
+    presenter timeline matches the reader manifest. The presenter video keeps
+    its own audio track, so the viewer can use it as the sole media element.
+    """
+    from ..reader_assets import PRESENTER_NAME
+    from ..lipsync import _get_audio_duration
+
+    dest = os.path.join(output_dir, PRESENTER_NAME)
+    tmpdir = tempfile.mkdtemp(prefix="presenter_", dir=output_dir)
+    try:
+        normalized: List[str] = []
+        for aligned_chunk, clip in zip(aligned_chunks, lipsync_clips):
+            duration = _get_audio_duration(aligned_chunk.audio_path)
+            norm = os.path.join(tmpdir, f"chunk_{aligned_chunk.chunk_num:03d}.mp4")
+            _normalize_presenter_chunk(clip, norm, duration, fps)
+            normalized.append(norm)
+        _concat_presenter_chunks(normalized, dest)
+    finally:
+        import shutil
+
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    return dest
+
+
+def build_lipsync_reader(
+    request: LipsyncPipelineRequest,
+    aligned_chunks,
+    lipsync_clips,
+    tracker,
+    *,
+    reporter: Optional[PipelineReporter] = None,
+) -> PipelineRunResult:
+    """Build the reader bundle: manifest + audio + page images + presenter video.
+
+    This is the default web output — the presenter video and the document are
+    delivered separately so the browser viewer can combine them flexibly.
+    """
+    from ..reader_assets import MANIFEST_NAME, PRESENTER_NAME, build_reader_assets
+
+    reporter = get_reporter(reporter)
+
+    reporter.phase_start("presenter", "\n=== BUILDING PRESENTER VIDEO ===")
+    presenter_path = os.path.join(request.output_dir, PRESENTER_NAME)
+    if tracker.is_presenter_built() and os.path.isfile(presenter_path) and not request.clean:
+        reporter.line(f"  Presenter video already built: {presenter_path}")
+    else:
+        presenter_path = _build_presenter_video(
+            aligned_chunks, lipsync_clips, request.output_dir, request.fps,
+        )
+        tracker.mark_presenter_built()
+        reporter.line(f"  Presenter video: {presenter_path}")
+
+    reporter.phase_start("reader_assets", "\n=== BUILDING READER ASSETS ===")
+    manifest_path = build_reader_assets(
+        aligned_chunks=aligned_chunks,
+        output_dir=request.output_dir,
+        pdf_path=request.pdf,
+        title=build_title(request.pdf),
+        language=request.language,
+        presenter=PRESENTER_NAME,
+    )
+    if not manifest_path:
+        msg = "Reader bundle could not be built: no chunks available."
+        print(msg, file=sys.stderr)
+        return PipelineRunResult(exit_code=1, error_message=msg)
+
+    _warn_on_presenter_drift(presenter_path, manifest_path, reporter)
+
+    request.output = MANIFEST_NAME
+    reporter.line(f"\nDone: {manifest_path}")
+    return PipelineRunResult(exit_code=0, output_name=MANIFEST_NAME, output_path=manifest_path)
+
+
+def _warn_on_presenter_drift(presenter_path: str, manifest_path: str, reporter) -> None:
+    """Log a warning if the presenter video and manifest timelines diverge."""
+    import json
+
+    from ..lipsync import _get_audio_duration
+
+    try:
+        presenter_dur = _get_audio_duration(presenter_path)
+        with open(manifest_path, "r", encoding="utf-8") as fh:
+            manifest_dur = json.load(fh).get("duration", 0.0)
+    except Exception:  # noqa: BLE001
+        return
+    drift = abs(presenter_dur - manifest_dur)
+    if drift > 0.05:
+        reporter.line(
+            f"  Warning: presenter video ({presenter_dur:.3f}s) and reader "
+            f"timeline ({manifest_dur:.3f}s) differ by {drift:.3f}s."
+        )

@@ -84,6 +84,7 @@ export interface LipsyncConfig {
   width: number;
   height: number;
   fps: number;
+  format?: "reader" | "mp4" | "epub";
 }
 
 export interface VisualizationConfig {
@@ -125,6 +126,7 @@ export interface ReaderManifest {
   source_type: string;
   duration: number;
   audio: string;
+  presenter: string | null;
   pages: ReaderPages | null;
   chunks: ReaderChunk[];
 }
@@ -132,6 +134,14 @@ export interface ReaderManifest {
 export interface ReaderStatus {
   available: boolean;
   message: string;
+}
+
+export type Mp4ExportStatus = "running" | "done" | "failed" | null;
+
+export interface Mp4ExportState {
+  export_status: Mp4ExportStatus;
+  export_output: string | null;
+  export_error: string | null;
 }
 
 export interface JobCreateRequest {

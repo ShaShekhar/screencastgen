@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { deleteJob, getDownloadUrl, getJob } from "../api/jobs";
+import {
+  deleteJob,
+  getDownloadUrl,
+  getJob,
+  getMp4ExportDownloadUrl,
+  getMp4ExportStatus,
+  requestMp4Export,
+} from "../api/jobs";
 import { getReaderStatus } from "../api/reader";
 import ProgressBar from "../components/ProgressBar";
 import { useJobProgress } from "../hooks/useJobProgress";
-import { Job, JobStatus } from "../types";
+import { Job, JobStatus, Mp4ExportStatus } from "../types";
 
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
@@ -36,6 +43,8 @@ export default function JobDetail() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [readerReady, setReaderReady] = useState<boolean | null>(null);
   const [readerMessage, setReaderMessage] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState<Mp4ExportStatus>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const isActive = job?.status === "pending" || job?.status === "running";
   const progress = useJobProgress(id, isActive ?? false);
@@ -56,9 +65,12 @@ export default function JobDetail() {
     fetchJob();
   }, [fetchJob]);
 
+  const isReaderPipeline =
+    job?.pipeline_type === "highlight" || job?.pipeline_type === "lipsync";
+
   useEffect(() => {
     if (!id || !job) return;
-    if (job.pipeline_type !== "highlight" || job.status !== "completed") {
+    if (!isReaderPipeline || job.status !== "completed") {
       setReaderReady(null);
       setReaderMessage(null);
       return;
@@ -104,6 +116,47 @@ export default function JobDetail() {
       fetchJob();
     }
   }, [progress, fetchJob]);
+
+  // Poll the MP4 export status while a baked-MP4 export is running.
+  useEffect(() => {
+    if (!id || !job) return;
+    if (job.pipeline_type !== "lipsync" || job.status !== "completed") return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = () => {
+      getMp4ExportStatus(id)
+        .then((state) => {
+          if (cancelled) return;
+          setExportStatus(state.export_status);
+          setExportError(state.export_error);
+          if (state.export_status === "running") {
+            timer = setTimeout(poll, 3000);
+          }
+        })
+        .catch(() => undefined);
+    };
+    poll();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [id, job]);
+
+  const handleExport = async () => {
+    if (!id) return;
+    setExportError(null);
+    setExportStatus("running");
+    try {
+      const state = await requestMp4Export(id);
+      setExportStatus(state.export_status ?? "running");
+    } catch {
+      setExportStatus("failed");
+      setExportError("Could not start the MP4 export.");
+    }
+  };
 
   const handleDelete = async () => {
     if (!id) return;
@@ -210,7 +263,7 @@ export default function JobDetail() {
                 Download MP4
               </a>
             </>
-          ) : job.pipeline_type === "highlight" && readerReady !== false ? (
+          ) : isReaderPipeline && readerReady !== false ? (
             <Link
               to={`/jobs/${job.id}/read`}
               className="group flex items-center gap-4 rounded-lg p-2 -m-2 hover:bg-green-100/70 transition"
@@ -245,7 +298,7 @@ export default function JobDetail() {
               </a>
             </>
           )}
-          {job.pipeline_type === "highlight" && readerReady !== true && readerMessage && (
+          {isReaderPipeline && readerReady !== true && readerMessage && (
             <p
               className={`mt-3 text-sm ${
                 readerReady === false ? "text-amber-700" : "text-gray-600"
@@ -253,6 +306,37 @@ export default function JobDetail() {
             >
               {readerMessage}
             </p>
+          )}
+          {job.pipeline_type === "lipsync" && (
+            <div className="mt-4 pt-4 border-t border-green-200">
+              <p className="text-xs uppercase tracking-wide text-green-700/80 mb-2">
+                Composited video
+              </p>
+              {exportStatus === "done" ? (
+                <a
+                  href={getMp4ExportDownloadUrl(job.id)}
+                  className="inline-block bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition"
+                >
+                  Download composited MP4
+                </a>
+              ) : exportStatus === "running" ? (
+                <p className="text-sm text-green-700">
+                  Baking the composited MP4… this runs in the background.
+                </p>
+              ) : (
+                <button
+                  onClick={handleExport}
+                  className="inline-block bg-white border border-green-300 text-green-800 px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-100 transition"
+                >
+                  Export composited MP4
+                </button>
+              )}
+              {exportStatus === "failed" && (
+                <p className="mt-2 text-sm text-amber-700">
+                  {exportError || "The MP4 export failed."}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}

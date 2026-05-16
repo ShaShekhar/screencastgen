@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
-from screencastgen.reader_assets import AUDIO_NAME, MANIFEST_NAME, PAGES_DIR
+from screencastgen.reader_assets import AUDIO_NAME, MANIFEST_NAME, PAGES_DIR, PRESENTER_NAME
 
 from ..database import async_session_factory
 from ..models import Job, JobStatus
@@ -59,11 +59,11 @@ async def reader_status(job_id: UUID):
                 "message": "Job output not available yet.",
             }
         )
-    if job.pipeline_type.value != "highlight":
+    if job.pipeline_type.value not in ("highlight", "lipsync"):
         return JSONResponse(
             {
                 "available": False,
-                "message": "Browser reader is only available for highlight jobs.",
+                "message": "Browser reader is only available for highlight and lip-sync jobs.",
             }
         )
 
@@ -96,6 +96,15 @@ async def reader_audio(job_id: UUID):
     if not path:
         raise HTTPException(404, "Reader audio not available for this job")
     return FileResponse(path, media_type="audio/mpeg", filename=AUDIO_NAME)
+
+
+@router.get("/jobs/{job_id}/reader/presenter")
+async def reader_presenter(job_id: UUID):
+    await _load_ready_job(job_id)
+    path = _resolve_reader_asset(job_id, PRESENTER_NAME)
+    if not path:
+        raise HTTPException(404, "Presenter video not available for this job")
+    return FileResponse(path, media_type="video/mp4", filename=PRESENTER_NAME)
 
 
 @router.get("/jobs/{job_id}/reader/pages/{filename}")

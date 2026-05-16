@@ -65,7 +65,14 @@ class LipsyncConfig(BaseModel):
     width: int = DEFAULT_VIDEO_WIDTH
     height: int = DEFAULT_VIDEO_HEIGHT
     fps: int = DEFAULT_VIDEO_FPS
+    format: str = "reader"
     model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def _check_format(self) -> "LipsyncConfig":
+        if self.format not in ("reader", "mp4", "epub"):
+            raise ValueError("format must be 'reader', 'mp4', or 'epub'")
+        return self
 
 
 class VisualizationConfig(BaseModel):
