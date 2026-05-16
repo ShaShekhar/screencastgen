@@ -8,24 +8,25 @@ interface Props {
   config: LipsyncConfig;
 }
 
-interface Size {
-  width: number;
-  height: number;
-}
+type ThemeName = "night" | "pdf";
 
-interface Box {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+const THEMES: Record<ThemeName, { bg: string; fg: string }> = {
+  night: { bg: "#0b0b0c", fg: "#e8e8ea" },
+  pdf: { bg: "#f7f1e3", fg: "#1f2937" },
+};
 
-const OVERLAY_POSITIONS = new Set([
-  "top-left",
-  "top-right",
-  "bottom-left",
-  "bottom-right",
-]);
+// The reader viewer floats the presenter as a movable picture-in-picture.
+// `face_position` only seeds which corner it starts in; split/center layouts
+// from the old baked-MP4 composite collapse to a sensible corner here.
+const PIP_CORNER: Record<string, { v: "top" | "bottom"; h: "left" | "right" }> = {
+  "top-left": { v: "top", h: "left" },
+  "top-right": { v: "top", h: "right" },
+  "bottom-left": { v: "bottom", h: "left" },
+  "bottom-right": { v: "bottom", h: "right" },
+  left: { v: "bottom", h: "left" },
+  right: { v: "bottom", h: "right" },
+  center: { v: "top", h: "right" },
+};
 
 function isTextDocument(file: UploadedFile | null | undefined): boolean {
   if (!file) return false;
@@ -39,102 +40,22 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function calculateLayout(config: LipsyncConfig, videoSize: Size): {
-  face: Box;
-  text: Box;
-} {
-  const frameW = config.width;
-  const frameH = config.height;
-  const margin = Math.max(16, Math.floor(Math.min(frameW, frameH) * 0.03));
-
-  if (OVERLAY_POSITIONS.has(config.face_position)) {
-    const srcFaceW = Math.max(videoSize.width, 1);
-    const srcFaceH = Math.max(videoSize.height, 1);
-    let faceW = Math.max(1, Math.floor(frameW * clamp(config.face_scale, 0.1, 0.9)));
-    let faceH = Math.max(1, Math.floor((srcFaceH * faceW) / srcFaceW));
-
-    if (faceH > frameH - margin * 2) {
-      faceH = Math.max(1, frameH - margin * 2);
-      faceW = Math.max(1, Math.floor((srcFaceW * faceH) / srcFaceH));
-    }
-
-    const railW = Math.min(frameW - 1, faceW + margin * 2);
-    const textW = Math.max(1, frameW - railW);
-    const faceX = config.face_position.endsWith("left")
-      ? margin
-      : frameW - faceW - margin;
-    const faceY = config.face_position.startsWith("top")
-      ? margin
-      : frameH - faceH - margin;
-    const textX = config.face_position.endsWith("left") ? frameW - textW : 0;
-
-    return {
-      face: { x: faceX, y: faceY, width: faceW, height: faceH },
-      text: { x: textX, y: 0, width: textW, height: frameH },
-    };
-  }
-
-  if (config.face_position === "left") {
-    return {
-      face: { x: 0, y: 0, width: Math.floor(frameW / 2), height: frameH },
-      text: {
-        x: Math.floor(frameW / 2),
-        y: 0,
-        width: Math.floor(frameW / 2),
-        height: frameH,
-      },
-    };
-  }
-
-  if (config.face_position === "right") {
-    return {
-      face: {
-        x: Math.floor(frameW / 2),
-        y: 0,
-        width: Math.floor(frameW / 2),
-        height: frameH,
-      },
-      text: { x: 0, y: 0, width: Math.floor(frameW / 2), height: frameH },
-    };
-  }
-
-  const faceW = Math.floor(frameW / 2);
-  const faceH = Math.floor(frameH / 2);
-  return {
-    face: { x: Math.floor((frameW - faceW) / 2), y: 0, width: faceW, height: faceH },
-    text: { x: 0, y: faceH, width: frameW, height: Math.max(1, frameH - faceH) },
-  };
-}
-
-function boxStyle(box: Box, frame: Size): CSSProperties {
-  return {
-    left: `${(box.x / frame.width) * 100}%`,
-    top: `${(box.y / frame.height) * 100}%`,
-    width: `${(box.width / frame.width) * 100}%`,
-    height: `${(box.height / frame.height) * 100}%`,
-  };
-}
-
 export default function LipsyncPreviewFrame({ uploadedFile, config }: Props) {
   const frameRef = useRef<HTMLDivElement>(null);
-  const [videoSize, setVideoSize] = useState<Size>({ width: 16, height: 9 });
   const [frameDisplayWidth, setFrameDisplayWidth] = useState(0);
   const [documentText, setDocumentText] = useState<string | null>(null);
+  const [theme, setTheme] = useState<ThemeName>("night");
+
   const canPreview = !!uploadedFile && !!config.ref_video_file_id;
   const documentUrl = uploadedFile ? getUploadPreviewUrl(uploadedFile.id) : null;
   const videoUrl = config.ref_video_file_id
     ? getUploadPreviewUrl(config.ref_video_file_id)
     : null;
-
-  const layout = useMemo(
-    () => calculateLayout(config, videoSize),
-    [config, videoSize],
-  );
+  const isText = isTextDocument(uploadedFile);
 
   useEffect(() => {
     const el = frameRef.current;
     if (!el) return;
-
     const observer = new ResizeObserver((entries) => {
       setFrameDisplayWidth(entries[0]?.contentRect.width ?? 0);
     });
@@ -147,7 +68,6 @@ export default function LipsyncPreviewFrame({ uploadedFile, config }: Props) {
       setDocumentText(null);
       return;
     }
-
     let cancelled = false;
     fetch(documentUrl)
       .then((resp) => (resp.ok ? resp.text() : ""))
@@ -157,32 +77,39 @@ export default function LipsyncPreviewFrame({ uploadedFile, config }: Props) {
       .catch(() => {
         if (!cancelled) setDocumentText("Preview frame");
       });
-
     return () => {
       cancelled = true;
     };
   }, [documentUrl, uploadedFile]);
 
-  const frameSize = { width: config.width, height: config.height };
   const previewFontSize = Math.max(
     10,
     config.font_size * (frameDisplayWidth ? frameDisplayWidth / config.width : 0.5),
   );
 
+  const corner = PIP_CORNER[config.face_position] ?? PIP_CORNER["bottom-right"];
+  const pipStyle = useMemo<CSSProperties>(() => {
+    const widthPct = clamp(config.face_scale, 0.1, 0.6) * 100;
+    const style: CSSProperties = { width: `${widthPct}%` };
+    style[corner.v] = "4%";
+    style[corner.h] = "4%";
+    return style;
+  }, [config.face_scale, corner]);
+
+  const colors = THEMES[theme];
+
   const renderDocument = () => {
     if (!uploadedFile || !documentUrl) return null;
-
-    if (isTextDocument(uploadedFile)) {
+    if (isText) {
       return (
         <div
-          className="h-full overflow-hidden whitespace-pre-wrap break-words p-4 leading-relaxed text-white"
-          style={{ fontSize: previewFontSize }}
+          className="h-full overflow-hidden whitespace-pre-wrap break-words p-4 leading-relaxed"
+          style={{ fontSize: previewFontSize, color: colors.fg }}
         >
           {documentText ?? "Loading preview..."}
         </div>
       );
     }
-
     return (
       <object
         data={documentUrl}
@@ -198,43 +125,44 @@ export default function LipsyncPreviewFrame({ uploadedFile, config }: Props) {
 
   return (
     <div className="rounded-lg border border-gray-200 p-4">
-      <div className="mb-3">
-        <h3 className="text-sm font-semibold text-gray-800">Frame Preview</h3>
-        <p className="text-xs text-gray-500">
-          {config.width}x{config.height} at {config.fps} fps
-        </p>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800">Viewer Preview</h3>
+          <p className="text-xs text-gray-500">
+            Reader viewer · presenter floats as a movable picture-in-picture
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setTheme((t) => (t === "night" ? "pdf" : "night"))}
+          className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 transition"
+        >
+          {theme === "night" ? "☾ Night" : "☀ PDF"}
+        </button>
       </div>
 
       {canPreview && videoUrl ? (
         <div
           ref={frameRef}
-          className="relative w-full overflow-hidden rounded-lg border border-gray-200 bg-[#1e1e1e]"
-          style={{ aspectRatio: `${config.width} / ${config.height}` }}
+          className="relative w-full overflow-hidden rounded-lg border border-gray-200"
+          style={{
+            aspectRatio: `${config.width} / ${config.height}`,
+            backgroundColor: isText ? colors.bg : "#ffffff",
+          }}
         >
-          <div
-            className="absolute overflow-hidden bg-[#1e1e1e]"
-            style={boxStyle(layout.text, frameSize)}
-          >
-            {renderDocument()}
-          </div>
+          {renderDocument()}
           <video
             src={videoUrl}
             muted
             playsInline
             preload="metadata"
-            className="absolute bg-black"
-            style={{
-              ...boxStyle(layout.face, frameSize),
-              objectFit: OVERLAY_POSITIONS.has(config.face_position)
-                ? "contain"
-                : "fill",
-            }}
+            className="absolute rounded-md border border-black/40 bg-black shadow-lg"
+            style={{ ...pipStyle, objectFit: "cover", aspectRatio: "16 / 9" }}
             onLoadedMetadata={(e) => {
-              setVideoSize({
-                width: e.currentTarget.videoWidth || 16,
-                height: e.currentTarget.videoHeight || 9,
-              });
-              e.currentTarget.currentTime = Math.min(1, e.currentTarget.duration || 1);
+              e.currentTarget.currentTime = Math.min(
+                1,
+                e.currentTarget.duration || 1,
+              );
             }}
           />
         </div>
@@ -243,9 +171,14 @@ export default function LipsyncPreviewFrame({ uploadedFile, config }: Props) {
           className="flex items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-500"
           style={{ aspectRatio: `${config.width} / ${config.height}` }}
         >
-          Upload a document and reference video to preview the frame.
+          Upload a document and reference video to preview the viewer.
         </div>
       )}
+
+      <p className="mt-2 text-xs text-gray-500">
+        The theme and presenter position are adjustable live while watching;
+        this is just a starting point.
+      </p>
     </div>
   );
 }
