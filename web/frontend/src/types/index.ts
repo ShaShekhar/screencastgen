@@ -73,9 +73,8 @@ export interface LanguageOption {
 }
 
 export interface LipsyncConfig {
-  ref_audio_file_id: string;
+  ref_audio_file_id?: string | null;
   ref_video_file_id: string;
-  ref_text?: string;
   backend?: string;
   lipsync_provider?: string;
   device: string;

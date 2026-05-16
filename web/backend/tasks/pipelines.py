@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 import sys
 import traceback
 import uuid
@@ -36,6 +37,7 @@ from .progress import JobProgressReporter
 from ..config import settings
 from ..models import Job, JobStatus, UploadedFile
 from ..services.storage import get_upload_abs_path, get_output_dir, upload_output
+from ..services.transcribe_client import transcribe_upload
 
 logger = logging.getLogger(__name__)
 
@@ -173,15 +175,25 @@ def _build_lipsync_request(
     output_filename = os.path.splitext(os.path.basename(pdf_path))[0] + "_lipsync.mp4"
 
     ref_audio_path = ""
+    ref_text = cfg.get("ref_text")
     ref_video_path = ""
     if job.ref_audio_file_id:
         ref_audio = db_session.get(UploadedFile, job.ref_audio_file_id)
         if ref_audio:
             ref_audio_path = get_upload_abs_path(ref_audio.stored_path)
+            ref_text = ref_text or ref_audio.ref_text
     if job.ref_video_file_id:
         ref_video = db_session.get(UploadedFile, job.ref_video_file_id)
         if ref_video:
             ref_video_path = get_upload_abs_path(ref_video.stored_path)
+
+    if not ref_audio_path and ref_video_path:
+        ref_audio_path = _extract_reference_audio_from_video(ref_video_path, output_dir)
+        ref_text = ref_text or transcribe_upload(
+            cfg.get("tts_server_url") or settings.TTS_SERVER_URL,
+            ref_audio_path,
+            language=cfg.get("language", DEFAULT_LANGUAGE),
+        )
 
     return LipsyncPipelineRequest(
         pdf=pdf_path,
@@ -199,7 +211,7 @@ def _build_lipsync_request(
         verbose=True,
         ref_audio=ref_audio_path,
         ref_video=ref_video_path,
-        ref_text=cfg.get("ref_text"),
+        ref_text=ref_text,
         device=cfg.get("device", "auto"),
         aligner=cfg.get("aligner", get_default_alignment_provider()),
         lipsync_provider=cfg.get("lipsync_provider", get_default_lipsync_provider()),
@@ -210,6 +222,37 @@ def _build_lipsync_request(
         resolution=f"{cfg.get('width', DEFAULT_VIDEO_WIDTH)}x{cfg.get('height', DEFAULT_VIDEO_HEIGHT)}",
         fps=cfg.get("fps", DEFAULT_VIDEO_FPS),
     )
+
+
+def _extract_reference_audio_from_video(video_path: str, output_dir: str) -> str:
+    """Extract a short mono WAV from a reference video for voice cloning."""
+    os.makedirs(output_dir, exist_ok=True)
+    audio_path = os.path.join(output_dir, "reference_video_audio.wav")
+    if os.path.isfile(audio_path) and os.path.getsize(audio_path) > 0:
+        return audio_path
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        video_path,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-t",
+        "30",
+        audio_path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 or not os.path.isfile(audio_path) or os.path.getsize(audio_path) == 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        msg = "Reference video does not contain usable audio. Upload a reference audio override."
+        if detail:
+            logger.warning("Reference audio extraction failed: %s", detail[-1000:])
+        raise ValueError(msg)
+    return audio_path
 
 
 def _build_visualization_request(job: Job, output_dir: str) -> VisualizationPipelineRequest:

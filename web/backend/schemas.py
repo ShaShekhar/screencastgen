@@ -54,9 +54,8 @@ class HighlightConfig(AudioConfig):
 
 
 class LipsyncConfig(BaseModel):
-    ref_audio_file_id: UUID
+    ref_audio_file_id: Optional[UUID] = None
     ref_video_file_id: UUID
-    ref_text: Optional[str] = None
     backend: str = "remote"
     aligner: str = "whisperx"
     lipsync_provider: str = "auto"

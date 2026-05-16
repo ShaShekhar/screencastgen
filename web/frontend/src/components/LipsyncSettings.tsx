@@ -34,25 +34,7 @@ export default function LipsyncSettings({ config, onChange }: Props) {
     <div className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Reference Audio (voice to clone)
-        </label>
-        {audioName ? (
-          <p className="text-sm text-green-700">{audioName}</p>
-        ) : (
-          <FileUploader
-            accept="audio/*"
-            label="Upload reference audio clip"
-            onUploaded={(f: UploadedFile) => {
-              setAudioName(f.original_name);
-              onChange({ ...config, ref_audio_file_id: f.id });
-            }}
-          />
-        )}
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Reference Video (face, ~10 seconds)
+          Reference Video (face and voice, ~10 seconds)
         </label>
         {videoName ? (
           <p className="text-sm text-green-700">{videoName}</p>
@@ -66,21 +48,30 @@ export default function LipsyncSettings({ config, onChange }: Props) {
             }}
           />
         )}
+        <p className="mt-1 text-xs text-gray-500">
+          If this video has clear speaker audio, it will be used as the voice reference.
+        </p>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Reference Text (optional, auto-transcribed if empty)
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Reference Audio Override (optional)
         </label>
-        <textarea
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          rows={3}
-          placeholder="Transcript of reference audio..."
-          value={config.ref_text || ""}
-          onChange={(e) =>
-            onChange({ ...config, ref_text: e.target.value || undefined })
-          }
-        />
+        {audioName ? (
+          <p className="text-sm text-green-700">{audioName}</p>
+        ) : (
+          <FileUploader
+            accept="audio/*"
+            label="Upload reference audio clip"
+            onUploaded={(f: UploadedFile) => {
+              setAudioName(f.original_name);
+              onChange({ ...config, ref_audio_file_id: f.id });
+            }}
+          />
+        )}
+        <p className="mt-1 text-xs text-gray-500">
+          Upload audio only when you want to override the audio embedded in the reference video.
+        </p>
       </div>
 
       <div>

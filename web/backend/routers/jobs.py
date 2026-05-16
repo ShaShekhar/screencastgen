@@ -24,7 +24,8 @@ def _build_config(req: JobCreateRequest) -> dict:
         return cfg
     elif req.pipeline_type == "lipsync" and req.lipsync_config:
         cfg = req.lipsync_config.model_dump()
-        cfg["ref_audio_file_id"] = str(cfg["ref_audio_file_id"])
+        if cfg.get("ref_audio_file_id") is not None:
+            cfg["ref_audio_file_id"] = str(cfg["ref_audio_file_id"])
         cfg["ref_video_file_id"] = str(cfg["ref_video_file_id"])
         return cfg
     elif req.pipeline_type == "visualization" and req.visualization_config:
@@ -54,7 +55,10 @@ async def create_job(req: JobCreateRequest):
         if req.pipeline_type == "lipsync" and req.lipsync_config:
             ref_audio_id = req.lipsync_config.ref_audio_file_id
             ref_video_id = req.lipsync_config.ref_video_file_id
-            for fid, label in [(ref_audio_id, "Reference audio"), (ref_video_id, "Reference video")]:
+            refs = [(ref_video_id, "Reference video")]
+            if ref_audio_id:
+                refs.append((ref_audio_id, "Reference audio"))
+            for fid, label in refs:
                 f = await session.get(UploadedFile, fid)
                 if not f:
                     raise HTTPException(404, f"{label} file not found")

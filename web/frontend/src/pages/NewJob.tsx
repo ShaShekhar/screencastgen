@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createJob } from "../api/jobs";
 import FileUploader from "../components/FileUploader";
+import LipsyncPreviewFrame from "../components/LipsyncPreviewFrame";
 import LipsyncSettings from "../components/LipsyncSettings";
 import PipelineSelector from "../components/PipelineSelector";
 import VideoSettings from "../components/VideoSettings";
@@ -26,7 +27,7 @@ const DEFAULT_HIGHLIGHT: HighlightConfig = {
 };
 
 const DEFAULT_LIPSYNC: LipsyncConfig = {
-  ref_audio_file_id: "",
+  ref_audio_file_id: null,
   ref_video_file_id: "",
   lipsync_provider: "auto",
   device: "auto",
@@ -76,10 +77,7 @@ export default function NewJob() {
     }
     if (!uploadedFile) return false;
     if (pipeline === "lipsync") {
-      return (
-        lipsyncConfig.ref_audio_file_id !== "" &&
-        lipsyncConfig.ref_video_file_id !== ""
-      );
+      return lipsyncConfig.ref_video_file_id !== "";
     }
     return true;
   };
@@ -167,6 +165,10 @@ export default function NewJob() {
                 onChange={(c) =>
                   setLipsyncConfig({ ...lipsyncConfig, ...c })
                 }
+              />
+              <LipsyncPreviewFrame
+                uploadedFileId={uploadedFile?.id}
+                config={lipsyncConfig}
               />
             </div>
           )}
