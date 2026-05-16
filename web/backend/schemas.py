@@ -58,8 +58,6 @@ class LipsyncConfig(BaseModel):
     ref_video_file_id: UUID
     backend: str = "remote"
     aligner: str = "whisperx"
-    lipsync_provider: str = "auto"
-    device: str = "auto"
     face_position: str = "bottom-right"
     face_scale: float = 0.22
     latentsync_preset: str = "quality"

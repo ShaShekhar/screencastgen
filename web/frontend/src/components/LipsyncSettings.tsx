@@ -16,11 +16,6 @@ const FACE_POSITIONS = [
   { value: "right", label: "Split Right" },
   { value: "center", label: "Top Center" },
 ];
-const LIPSYNC_PROVIDERS = [
-  { value: "auto", label: "Auto" },
-  { value: "latentsync", label: "LatentSync" },
-  { value: "wav2lip", label: "Wav2Lip" },
-];
 const LATENTSYNC_PRESETS = [
   { value: "small", label: "Small Docked (Recommended)" },
   { value: "quality", label: "Higher Quality" },
@@ -30,6 +25,16 @@ export default function LipsyncSettings({ config, onChange }: Props) {
   const [audioName, setAudioName] = useState<string | null>(null);
   const [videoName, setVideoName] = useState<string | null>(null);
 
+  const resetVideo = () => {
+    setVideoName(null);
+    onChange({ ...config, ref_video_file_id: "" });
+  };
+
+  const resetAudio = () => {
+    setAudioName(null);
+    onChange({ ...config, ref_audio_file_id: null });
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -37,7 +42,18 @@ export default function LipsyncSettings({ config, onChange }: Props) {
           Reference Video (face and voice, ~10 seconds)
         </label>
         {videoName ? (
-          <p className="text-sm text-green-700">{videoName}</p>
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+            <p className="min-w-0 truncate text-sm font-medium text-green-700">
+              {videoName}
+            </p>
+            <button
+              type="button"
+              onClick={resetVideo}
+              className="shrink-0 rounded-md border border-green-300 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100 transition"
+            >
+              Replace
+            </button>
+          </div>
         ) : (
           <FileUploader
             accept="video/*"
@@ -58,7 +74,18 @@ export default function LipsyncSettings({ config, onChange }: Props) {
           Reference Audio Override (optional)
         </label>
         {audioName ? (
-          <p className="text-sm text-green-700">{audioName}</p>
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+            <p className="min-w-0 truncate text-sm font-medium text-green-700">
+              {audioName}
+            </p>
+            <button
+              type="button"
+              onClick={resetAudio}
+              className="shrink-0 rounded-md border border-green-300 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100 transition"
+            >
+              Replace
+            </button>
+          </div>
         ) : (
           <FileUploader
             accept="audio/*"
@@ -134,40 +161,6 @@ export default function LipsyncSettings({ config, onChange }: Props) {
         <p className="mt-1 text-xs text-gray-500">
           {Math.round(config.face_scale * 100)}% of frame width for docked corner layouts.
         </p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Lip-Sync Provider
-        </label>
-        <select
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          value={config.lipsync_provider || "auto"}
-          onChange={(e) =>
-            onChange({ ...config, lipsync_provider: e.target.value })
-          }
-        >
-          {LIPSYNC_PROVIDERS.map((provider) => (
-            <option key={provider.value} value={provider.value}>
-              {provider.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Device
-        </label>
-        <select
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          value={config.device}
-          onChange={(e) => onChange({ ...config, device: e.target.value })}
-        >
-          <option value="auto">Auto</option>
-          <option value="cuda">CUDA (GPU)</option>
-          <option value="cpu">CPU</option>
-        </select>
       </div>
     </div>
   );

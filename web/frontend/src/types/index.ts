@@ -76,8 +76,6 @@ export interface LipsyncConfig {
   ref_audio_file_id?: string | null;
   ref_video_file_id: string;
   backend?: string;
-  lipsync_provider?: string;
-  device: string;
   tts_server_url?: string;
   face_position: string;
   face_scale: number;

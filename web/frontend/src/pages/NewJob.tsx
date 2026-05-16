@@ -29,8 +29,6 @@ const DEFAULT_HIGHLIGHT: HighlightConfig = {
 const DEFAULT_LIPSYNC: LipsyncConfig = {
   ref_audio_file_id: null,
   ref_video_file_id: "",
-  lipsync_provider: "auto",
-  device: "auto",
   face_position: "bottom-right",
   face_scale: 0.22,
   latentsync_preset: "quality",

@@ -19,7 +19,6 @@ from screencastgen.constants import (
     DEFAULT_VIDEO_HEIGHT,
     DEFAULT_VIDEO_WIDTH,
 )
-from screencastgen.lipsync import get_default_lipsync_provider
 from screencastgen.pipelines import PipelineReporter
 from screencastgen.pipelines.audio import run_audio_pipeline
 from screencastgen.pipelines.highlight import run_highlight_pipeline
@@ -212,9 +211,9 @@ def _build_lipsync_request(
         ref_audio=ref_audio_path,
         ref_video=ref_video_path,
         ref_text=ref_text,
-        device=cfg.get("device", "auto"),
+        device="auto",
         aligner=cfg.get("aligner", get_default_alignment_provider()),
-        lipsync_provider=cfg.get("lipsync_provider", get_default_lipsync_provider()),
+        lipsync_provider="latentsync",
         face_position=cfg.get("face_position", "bottom-right"),
         face_scale=cfg.get("face_scale", 0.22),
         latentsync_preset=cfg.get("latentsync_preset", "quality"),
