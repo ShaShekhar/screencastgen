@@ -1,18 +1,25 @@
 import { ChangeEvent, DragEvent, useCallback, useRef, useState } from "react";
-import { uploadFile } from "../api/uploads";
+import { getUploadPreviewUrl, uploadFile } from "../api/uploads";
 import { UploadedFile } from "../types";
 
 interface Props {
   accept: string;
   label: string;
   onUploaded: (file: UploadedFile) => void;
+  showPreview?: boolean;
 }
 
-export default function FileUploader({ accept, label, onUploaded }: Props) {
+export default function FileUploader({
+  accept,
+  label,
+  onUploaded,
+  showPreview = false,
+}: Props) {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -21,15 +28,18 @@ export default function FileUploader({ accept, label, onUploaded }: Props) {
       setError(null);
       setUploading(true);
       setFileName(file.name);
+      setUploadedFile(null);
       setProgress(0);
       try {
         const uploaded = await uploadFile(file, setProgress);
+        setUploadedFile(uploaded);
         onUploaded(uploaded);
       } catch (e: unknown) {
         const msg =
           e instanceof Error ? e.message : "Upload failed";
         setError(msg);
         setFileName(null);
+        setUploadedFile(null);
       } finally {
         setUploading(false);
       }
@@ -89,7 +99,20 @@ export default function FileUploader({ accept, label, onUploaded }: Props) {
           <p className="text-xs text-gray-500 mt-1">{progress}%</p>
         </div>
       ) : fileName ? (
-        <p className="text-sm text-green-700 font-medium">{fileName}</p>
+        <div className="space-y-2">
+          <p className="text-sm text-green-700 font-medium">{fileName}</p>
+          {showPreview && uploadedFile && (
+            <a
+              href={getUploadPreviewUrl(uploadedFile.id)}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center rounded-lg border border-green-200 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50 transition"
+            >
+              Open preview
+            </a>
+          )}
+        </div>
       ) : (
         <div>
           <p className="text-sm text-gray-600 font-medium">{label}</p>

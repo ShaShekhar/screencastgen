@@ -18,3 +18,7 @@ export async function uploadFile(
   });
   return resp.data;
 }
+
+export function getUploadPreviewUrl(id: string): string {
+  return `/api/uploads/${id}/preview`;
+}

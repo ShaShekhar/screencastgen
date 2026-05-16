@@ -25,11 +25,6 @@ const DEFAULT_HIGHLIGHT: HighlightConfig = {
   height: 720,
 };
 
-const MP4_RESOLUTIONS = [
-  { label: "720p (1280×720) — recommended", w: 1280, h: 720 },
-  { label: "1080p (1920×1080) — larger file", w: 1920, h: 1080 },
-];
-
 const DEFAULT_LIPSYNC: LipsyncConfig = {
   ref_audio_file_id: "",
   ref_video_file_id: "",
@@ -100,7 +95,7 @@ export default function NewJob() {
     };
 
     if (pipeline === "highlight") {
-      req.highlight_config = highlightConfig;
+      req.highlight_config = { ...highlightConfig, format: "epub" };
     } else if (pipeline === "lipsync") {
       req.lipsync_config = lipsyncConfig;
     } else if (pipeline === "visualization") {
@@ -131,6 +126,7 @@ export default function NewJob() {
             accept=".pdf,.txt,.epub"
             label="Upload a PDF, TXT, or EPUB file"
             onUploaded={setUploadedFile}
+            showPreview
           />
         </section>
       )}
@@ -149,92 +145,13 @@ export default function NewJob() {
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           {pipeline === "highlight" && (
             <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Output Format
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setHighlightConfig({ ...highlightConfig, format: "epub" })
-                    }
-                    className={`p-3 rounded-lg border-2 text-left transition ${
-                      highlightConfig.format === "epub"
-                        ? "border-indigo-600 bg-indigo-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <h4 className="font-semibold text-sm mb-0.5">EPUB</h4>
-                    <p className="text-xs text-gray-500">
-                      EPUB3 with embedded audio and word-level Media Overlay
-                      highlighting. Plays in Apple Books, Thorium, Readium.
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setHighlightConfig({ ...highlightConfig, format: "mp4" })
-                    }
-                    className={`p-3 rounded-lg border-2 text-left transition ${
-                      highlightConfig.format === "mp4"
-                        ? "border-indigo-600 bg-indigo-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <h4 className="font-semibold text-sm mb-0.5">MP4 Video</h4>
-                    <p className="text-xs text-gray-500">
-                      Rendered video with PDF page images and word-by-word
-                      highlighted text.
-                    </p>
-                  </button>
-                </div>
-              </div>
               <VoiceSettings
                 config={highlightConfig}
                 onChange={(c) =>
-                  setHighlightConfig({ ...highlightConfig, ...c })
+                  setHighlightConfig({ ...highlightConfig, ...c, format: "epub" })
                 }
                 uploadedFileId={uploadedFile?.id}
               />
-              {highlightConfig.format === "mp4" && (
-                <>
-                  <hr />
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Video Resolution
-                    </label>
-                    <select
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                      value={`${highlightConfig.width}x${highlightConfig.height}`}
-                      onChange={(e) => {
-                        const r = MP4_RESOLUTIONS.find(
-                          (r) => `${r.w}x${r.h}` === e.target.value,
-                        );
-                        if (r)
-                          setHighlightConfig({
-                            ...highlightConfig,
-                            width: r.w,
-                            height: r.h,
-                          });
-                      }}
-                    >
-                      {MP4_RESOLUTIONS.map((r) => (
-                        <option
-                          key={`${r.w}x${r.h}`}
-                          value={`${r.w}x${r.h}`}
-                        >
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Higher resolution produces sharper PDF pages but a
-                      larger output file. Frame rate is fixed at 24 fps.
-                    </p>
-                  </div>
-                </>
-              )}
             </div>
           )}
 

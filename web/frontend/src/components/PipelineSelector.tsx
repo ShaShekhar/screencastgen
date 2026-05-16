@@ -9,7 +9,7 @@ const PIPELINES: { type: PipelineType; title: string; desc: string }[] = [
   {
     type: "highlight",
     title: "Highlight Text Audio",
-    desc: "Narrated audiobook with synced word-by-word highlighting — as an EPUB3 or rendered MP4",
+    desc: "Narrated audiobook with synced word-by-word highlighting as an EPUB3 reader output",
   },
   {
     type: "lipsync",
