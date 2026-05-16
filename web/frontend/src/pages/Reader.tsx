@@ -15,8 +15,13 @@ import {
   getReaderPageUrl,
   getReaderPresenterUrl,
 } from "../api/reader";
-import { getDownloadUrl } from "../api/jobs";
-import { ReaderChunk, ReaderManifest } from "../types";
+import {
+  getDownloadUrl,
+  getMp4ExportDownloadUrl,
+  getMp4ExportStatus,
+  requestMp4Export,
+} from "../api/jobs";
+import { Mp4ExportStatus, ReaderChunk, ReaderManifest } from "../types";
 
 interface FlatWord {
   word: string;
@@ -62,10 +67,33 @@ const THEMES: Record<ThemeName, ThemeColors> = {
 };
 
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2];
-const PIP_SIZES = [200, 280, 380];
+const PIP_MIN_W = 160;
+const PIP_MAX_W = 640;
+const PIP_DEFAULT_W = 280;
+const PIP_EDGE = 16; // px-wide hit zone along each edge for resizing
 const THEME_KEY = "reader-theme";
 const PIP_POS_KEY = "reader-pip-pos";
-const PIP_SIZE_KEY = "reader-pip-size";
+const PIP_WIDTH_KEY = "reader-pip-width";
+
+type PipZone = "e" | "s" | "se" | "drag";
+
+const ZONE_CURSOR: Record<PipZone, string> = {
+  e: "ew-resize",
+  s: "ns-resize",
+  se: "nwse-resize",
+  drag: "grab",
+};
+
+/** Classify a pointer position over the PiP as a resize edge or a drag. */
+function pipZoneAt(el: HTMLElement, clientX: number, clientY: number): PipZone {
+  const r = el.getBoundingClientRect();
+  const onRight = clientX >= r.right - PIP_EDGE;
+  const onBottom = clientY >= r.bottom - PIP_EDGE;
+  if (onRight && onBottom) return "se";
+  if (onRight) return "e";
+  if (onBottom) return "s";
+  return "drag";
+}
 
 function fmtTime(secs: number): string {
   if (!Number.isFinite(secs) || secs < 0) return "0:00";
@@ -114,13 +142,16 @@ export default function Reader() {
 
   const [theme, setTheme] = useState<ThemeName>(loadTheme);
   const [invertPages, setInvertPages] = useState(false);
-  const [pipVisible, setPipVisible] = useState(true);
-  const [pipSizeIdx, setPipSizeIdx] = useState<number>(() => {
-    const stored = Number(localStorage.getItem(PIP_SIZE_KEY));
-    return Number.isInteger(stored) && stored >= 0 && stored < PIP_SIZES.length
+  const [pipWidth, setPipWidth] = useState<number>(() => {
+    const stored = Number(localStorage.getItem(PIP_WIDTH_KEY));
+    return Number.isFinite(stored) && stored >= PIP_MIN_W && stored <= PIP_MAX_W
       ? stored
-      : 1;
+      : PIP_DEFAULT_W;
   });
+  const [pipCursor, setPipCursor] = useState("grab");
+  const [pipVisible, setPipVisible] = useState(true);
+  const [exportStatus, setExportStatus] = useState<Mp4ExportStatus>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [pipPos, setPipPos] = useState<{ x: number; y: number }>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(PIP_POS_KEY) || "");
@@ -140,15 +171,26 @@ export default function Reader() {
   const rafRef = useRef<number | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasStartedPlayingRef = useRef(false);
-  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const pipGestureRef = useRef<
+    | { type: "drag"; dx: number; dy: number }
+    | {
+        type: "resize";
+        mode: "e" | "s" | "se";
+        startW: number;
+        startX: number;
+        startY: number;
+        aspect: number;
+      }
+    | null
+  >(null);
 
   useEffect(() => {
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem(PIP_SIZE_KEY, String(pipSizeIdx));
-  }, [pipSizeIdx]);
+    localStorage.setItem(PIP_WIDTH_KEY, String(Math.round(pipWidth)));
+  }, [pipWidth]);
 
   useEffect(() => {
     localStorage.setItem(PIP_POS_KEY, JSON.stringify(pipPos));
@@ -186,6 +228,47 @@ export default function Reader() {
   }, [id]);
 
   const hasPresenter = !!manifest?.presenter;
+
+  // Poll the composited-MP4 export status (lip-sync presenters only).
+  // Re-arms whenever the status returns to "running" (e.g. after Export).
+  useEffect(() => {
+    if (!id || !hasPresenter) return;
+    if (exportStatus === "done" || exportStatus === "failed") return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = () => {
+      getMp4ExportStatus(id)
+        .then((state) => {
+          if (cancelled) return;
+          setExportStatus(state.export_status);
+          setExportError(state.export_error);
+          if (state.export_status === "running") {
+            timer = setTimeout(poll, 3000);
+          }
+        })
+        .catch(() => undefined);
+    };
+    poll();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [id, hasPresenter, exportStatus]);
+
+  const handleExport = useCallback(async () => {
+    if (!id) return;
+    setExportError(null);
+    setExportStatus("running");
+    try {
+      const state = await requestMp4Export(id);
+      setExportStatus(state.export_status ?? "running");
+    } catch {
+      setExportStatus("failed");
+      setExportError("Could not start the MP4 export.");
+    }
+  }, [id]);
 
   const flatWords = useMemo(() => {
     if (!manifest) return [];
@@ -382,35 +465,70 @@ export default function Reader() {
     setCurrentTime(nextTime);
   }, []);
 
-  // -- PiP drag --------------------------------------------------------------
+  // -- PiP drag & edge-resize ------------------------------------------------
   const onPipPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      dragRef.current = {
-        dx: e.clientX - pipPos.x,
-        dy: e.clientY - pipPos.y,
-      };
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      const el = e.currentTarget;
+      const zone = pipZoneAt(el, e.clientX, e.clientY);
+      if (zone === "drag") {
+        pipGestureRef.current = {
+          type: "drag",
+          dx: e.clientX - pipPos.x,
+          dy: e.clientY - pipPos.y,
+        };
+        setPipCursor("grabbing");
+      } else {
+        const r = el.getBoundingClientRect();
+        pipGestureRef.current = {
+          type: "resize",
+          mode: zone,
+          startW: r.width,
+          startX: e.clientX,
+          startY: e.clientY,
+          aspect: r.height > 0 ? r.width / r.height : 16 / 9,
+        };
+      }
+      el.setPointerCapture(e.pointerId);
     },
     [pipPos],
   );
 
   const onPipPointerMove = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      const drag = dragRef.current;
-      if (!drag) return;
-      const width = PIP_SIZES[pipSizeIdx];
-      const maxX = Math.max(0, window.innerWidth - width);
-      const maxY = Math.max(0, window.innerHeight - 80);
-      setPipPos({
-        x: Math.min(Math.max(0, e.clientX - drag.dx), maxX),
-        y: Math.min(Math.max(0, e.clientY - drag.dy), maxY),
-      });
+      const el = e.currentTarget;
+      const g = pipGestureRef.current;
+      if (!g) {
+        // Idle hover: reflect the resize/drag affordance in the cursor.
+        setPipCursor(ZONE_CURSOR[pipZoneAt(el, e.clientX, e.clientY)]);
+        return;
+      }
+      if (g.type === "drag") {
+        const maxX = Math.max(0, window.innerWidth - el.offsetWidth);
+        const maxY = Math.max(0, window.innerHeight - el.offsetHeight);
+        setPipPos({
+          x: Math.min(Math.max(0, e.clientX - g.dx), maxX),
+          y: Math.min(Math.max(0, e.clientY - g.dy), maxY),
+        });
+      } else {
+        // Width is the only free dimension — height tracks the video aspect.
+        const delta =
+          g.mode === "s"
+            ? (e.clientY - g.startY) * g.aspect
+            : e.clientX - g.startX;
+        const maxFit = window.innerWidth - pipPos.x;
+        const next = Math.min(
+          Math.max(PIP_MIN_W, g.startW + delta),
+          Math.min(PIP_MAX_W, maxFit),
+        );
+        setPipWidth(next);
+      }
     },
-    [pipSizeIdx],
+    [pipPos],
   );
 
-  const onPipPointerUp = useCallback(() => {
-    dragRef.current = null;
+  const onPipPointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    pipGestureRef.current = null;
+    setPipCursor(ZONE_CURSOR[pipZoneAt(e.currentTarget, e.clientX, e.clientY)]);
   }, []);
 
   const colors = THEMES[theme];
@@ -497,6 +615,37 @@ export default function Reader() {
             >
               Show presenter
             </button>
+          )}
+          {id && hasPresenter && (
+            <>
+              {exportStatus === "done" ? (
+                <a
+                  href={getMp4ExportDownloadUrl(id)}
+                  className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] transition"
+                >
+                  ↓ Composited MP4
+                </a>
+              ) : exportStatus === "running" ? (
+                <span className="text-xs text-[var(--reader-muted)] px-1">
+                  Baking MP4…
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  title={
+                    exportStatus === "failed"
+                      ? exportError || "The MP4 export failed — click to retry."
+                      : undefined
+                  }
+                  className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] transition"
+                >
+                  {exportStatus === "failed"
+                    ? "Retry MP4 export"
+                    : "Export composited MP4"}
+                </button>
+              )}
+            </>
           )}
           {id && !hasPresenter && (
             <a
@@ -598,45 +747,31 @@ export default function Reader() {
       {hasPresenter ? (
         <div
           // Picture-in-picture presenter. Kept mounted at all times — it is the
-          // playback clock — and merely collapsed via `display:none` when hidden.
+          // playback clock. Drag from anywhere on the video; resize by dragging
+          // the right / bottom edges or the bottom-right corner.
+          onPointerDown={onPipPointerDown}
+          onPointerMove={onPipPointerMove}
+          onPointerUp={onPipPointerUp}
           style={{
             left: pipPos.x,
             top: pipPos.y,
-            width: PIP_SIZES[pipSizeIdx],
+            width: pipWidth,
+            cursor: pipCursor,
             display: pipVisible ? "block" : "none",
           }}
-          className="fixed z-30 rounded-xl overflow-hidden border border-[var(--reader-border)] shadow-2xl bg-black"
+          className="group fixed z-30 rounded-xl overflow-hidden border border-[var(--reader-border)] shadow-2xl bg-black select-none touch-none"
         >
-          <div
-            onPointerDown={onPipPointerDown}
-            onPointerMove={onPipPointerMove}
-            onPointerUp={onPipPointerUp}
-            className="flex items-center justify-between px-2 py-1 bg-[var(--reader-surface)] cursor-move select-none touch-none"
+          <button
+            type="button"
+            // stopPropagation keeps the container's drag handler from
+            // pointer-capturing this click.
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setPipVisible(false)}
+            aria-label="Hide presenter"
+            className="absolute top-1.5 right-1.5 z-10 grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white text-xs leading-none opacity-0 transition hover:bg-black/80 group-hover:opacity-100 pointer-events-auto"
           >
-            <span className="text-[10px] uppercase tracking-wider text-[var(--reader-muted)]">
-              Presenter
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() =>
-                  setPipSizeIdx((i) => (i + 1) % PIP_SIZES.length)
-                }
-                className="text-[10px] rounded px-1 text-[var(--reader-muted)] hover:bg-[var(--reader-hover)]"
-                aria-label="Resize presenter"
-              >
-                ⤢
-              </button>
-              <button
-                type="button"
-                onClick={() => setPipVisible(false)}
-                className="text-[10px] rounded px-1 text-[var(--reader-muted)] hover:bg-[var(--reader-hover)]"
-                aria-label="Hide presenter"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
+            ✕
+          </button>
           <video
             ref={(el) => {
               mediaRef.current = el;
@@ -644,7 +779,7 @@ export default function Reader() {
             src={id ? getReaderPresenterUrl(id) : undefined}
             playsInline
             preload="auto"
-            className="w-full block bg-black"
+            className="w-full block bg-black pointer-events-none"
             {...mediaHandlers}
           />
         </div>
