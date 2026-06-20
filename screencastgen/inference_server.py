@@ -13,11 +13,15 @@ Then uses ``--backend remote`` in the CLI or web app.
 
 Endpoints
 ---------
-POST /synthesize   — Text → audio (WAV/MP3)
-POST /transcribe   — Audio → plain text (WhisperX)
-POST /align        — Audio + text → word-level timestamps (JSON)
-POST /lipsync      — Audio + reference video → lip-synced video
-GET  /health       — Readiness and backend info
+POST   /synthesize          — Text → audio (WAV/MP3)
+POST   /transcribe          — Audio → plain text (WhisperX)
+POST   /align               — Audio + text → word-level timestamps (JSON)
+POST   /lipsync             — Queue a lip-sync job → JSON job handle
+GET    /lipsync/{id}        — Lip-sync job status + elapsed seconds
+GET    /lipsync/{id}/result — Download the finished lip-synced video
+POST   /lipsync/{id}/cancel — Request cancellation of a lip-sync job
+DELETE /lipsync/{id}        — Discard a lip-sync job and its output
+GET    /health              — Readiness and backend info
 """
 
 import argparse
@@ -25,6 +29,9 @@ import asyncio
 import os
 import sys
 import tempfile
+import threading
+import time
+import uuid
 from typing import Optional
 
 # ---------------------------------------------------------------------------
@@ -36,6 +43,78 @@ _backend_name: str = ""
 _device: str = "auto"
 _aligner_name: str = "whisperx"
 _lipsync_provider_name: str = "auto"
+
+# Async lip-sync jobs: clients submit work, then poll. Generation runs in a
+# background thread so a slow GPU never holds an HTTP connection open (which
+# would otherwise trip the client's socket timeout). The GPU lock serialises
+# generation so concurrent submissions queue rather than racing for VRAM.
+_lipsync_jobs: dict = {}
+_lipsync_jobs_lock = threading.Lock()
+_lipsync_gpu_lock = threading.Lock()
+
+
+def _safe_unlink(path: Optional[str]) -> None:
+    if path and os.path.exists(path):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def _run_lipsync_job(
+    job_id: str,
+    audio_path: str,
+    video_path: str,
+    provider: Optional[str],
+    preset: str,
+) -> None:
+    """Background worker: generate one lip-sync video and record the outcome."""
+    from .lipsync import generate_lipsync_video
+
+    entry = _lipsync_jobs.get(job_id)
+    if entry is None:
+        _safe_unlink(audio_path)
+        _safe_unlink(video_path)
+        return
+
+    tmp_output: Optional[str] = None
+    try:
+        with _lipsync_gpu_lock:
+            with _lipsync_jobs_lock:
+                if entry.get("cancelled"):
+                    entry["status"] = "cancelled"
+                    return
+                entry["status"] = "running"
+                entry["started_at"] = time.monotonic()
+
+            fd_o, tmp_output = tempfile.mkstemp(suffix=".mp4")
+            os.close(fd_o)
+            generate_lipsync_video(
+                audio_path=audio_path,
+                reference_video_path=video_path,
+                output_path=tmp_output,
+                provider=provider or _lipsync_provider_name,
+                device=_device,
+                latentsync_preset=preset,
+            )
+
+        with _lipsync_jobs_lock:
+            entry["finished_at"] = time.monotonic()
+            if entry.get("cancelled"):
+                entry["status"] = "cancelled"
+                _safe_unlink(tmp_output)
+            else:
+                entry["status"] = "done"
+                entry["output_path"] = tmp_output
+    except Exception as exc:  # noqa: BLE001 — surface any failure to the client
+        with _lipsync_jobs_lock:
+            entry["status"] = "failed"
+            entry["error"] = str(exc)
+            entry["finished_at"] = time.monotonic()
+        _safe_unlink(tmp_output)
+    finally:
+        _safe_unlink(audio_path)
+        _safe_unlink(video_path)
 
 
 def _create_app():
@@ -211,16 +290,18 @@ def _create_app():
     # ------------------------------------------------------------------
 
     @app.post("/lipsync")
-    async def lipsync(
+    async def lipsync_submit(
         audio: UploadFile = File(...),
         reference_video: UploadFile = File(...),
         provider: Optional[str] = Form(None),
         latentsync_preset: str = Form("quality"),
     ):
-        """Generate lip-synced video from audio and reference face video."""
-        from .lipsync import generate_lipsync_video
+        """Queue a lip-sync job and return a handle to poll.
 
-        # Save uploaded files to temp paths
+        Generation runs in a background thread, so this returns immediately —
+        the client polls ``GET /lipsync/{id}`` and never holds a long-lived
+        connection open while the GPU works.
+        """
         audio_suffix = os.path.splitext(audio.filename or "audio.wav")[1] or ".wav"
         video_suffix = os.path.splitext(reference_video.filename or "ref.mp4")[1] or ".mp4"
 
@@ -228,35 +309,79 @@ def _create_app():
         os.close(fd_a)
         fd_v, tmp_video = tempfile.mkstemp(suffix=video_suffix)
         os.close(fd_v)
-        fd_o, tmp_output = tempfile.mkstemp(suffix=".mp4")
-        os.close(fd_o)
+        with open(tmp_audio, "wb") as f:
+            f.write(await audio.read())
+        with open(tmp_video, "wb") as f:
+            f.write(await reference_video.read())
 
-        try:
-            audio_content = await audio.read()
-            with open(tmp_audio, "wb") as f:
-                f.write(audio_content)
+        job_id = uuid.uuid4().hex
+        with _lipsync_jobs_lock:
+            _lipsync_jobs[job_id] = {
+                "status": "queued",
+                "error": None,
+                "output_path": None,
+                "cancelled": False,
+                "submitted_at": time.monotonic(),
+                "started_at": None,
+                "finished_at": None,
+            }
+        threading.Thread(
+            target=_run_lipsync_job,
+            args=(job_id, tmp_audio, tmp_video, provider, latentsync_preset),
+            daemon=True,
+        ).start()
+        return {"lipsync_id": job_id, "status": "queued"}
 
-            video_content = await reference_video.read()
-            with open(tmp_video, "wb") as f:
-                f.write(video_content)
+    @app.get("/lipsync/{job_id}")
+    def lipsync_status(job_id: str):
+        """Report a lip-sync job's status and elapsed generation time."""
+        with _lipsync_jobs_lock:
+            entry = _lipsync_jobs.get(job_id)
+            if entry is None:
+                raise HTTPException(404, "Unknown lip-sync job")
+            started = entry.get("started_at")
+            finished = entry.get("finished_at")
+            elapsed = 0.0 if started is None else (finished or time.monotonic()) - started
+            return {
+                "lipsync_id": job_id,
+                "status": entry["status"],
+                "elapsed": round(elapsed, 1),
+                "error": entry.get("error"),
+            }
 
-            generate_lipsync_video(
-                audio_path=tmp_audio,
-                reference_video_path=tmp_video,
-                output_path=tmp_output,
-                provider=provider or _lipsync_provider_name,
-                device=_device,
-                latentsync_preset=latentsync_preset,
-            )
+    @app.get("/lipsync/{job_id}/result")
+    def lipsync_result(job_id: str):
+        """Download the finished lip-synced video."""
+        with _lipsync_jobs_lock:
+            entry = _lipsync_jobs.get(job_id)
+            if entry is None:
+                raise HTTPException(404, "Unknown lip-sync job")
+            if entry["status"] != "done" or not entry.get("output_path"):
+                raise HTTPException(409, f"Lip-sync job is {entry['status']}")
+            output_path = entry["output_path"]
+        with open(output_path, "rb") as f:
+            return Response(content=f.read(), media_type="video/mp4")
 
-            with open(tmp_output, "rb") as f:
-                result_bytes = f.read()
+    @app.post("/lipsync/{job_id}/cancel")
+    def lipsync_cancel(job_id: str):
+        """Request cancellation; an in-flight job's result is discarded."""
+        with _lipsync_jobs_lock:
+            entry = _lipsync_jobs.get(job_id)
+            if entry is None:
+                raise HTTPException(404, "Unknown lip-sync job")
+            entry["cancelled"] = True
+            if entry["status"] == "queued":
+                entry["status"] = "cancelled"
+            return {"lipsync_id": job_id, "status": entry["status"]}
 
-            return Response(content=result_bytes, media_type="video/mp4")
-        finally:
-            for p in (tmp_audio, tmp_video, tmp_output):
-                if os.path.exists(p):
-                    os.unlink(p)
+    @app.delete("/lipsync/{job_id}")
+    def lipsync_delete(job_id: str):
+        """Discard a lip-sync job record and its output file."""
+        with _lipsync_jobs_lock:
+            entry = _lipsync_jobs.pop(job_id, None)
+        if entry:
+            _safe_unlink(entry.get("output_path"))
+        return {"detail": "deleted"}
 
     return app
 

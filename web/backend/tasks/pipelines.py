@@ -353,7 +353,11 @@ def run_pipeline_task(self, job_id: str):
         pipeline_type = job.pipeline_type.value
 
         progress = JobProgressReporter(job_id=job_id, db_session=db_session)
-        reporter = PipelineReporter(stream=sys.stdout, on_event=progress.handle_event)
+        reporter = PipelineReporter(
+            stream=sys.stdout,
+            on_event=progress.handle_event,
+            should_cancel=progress.is_cancelled,
+        )
 
         logger.info(
             "Dispatching %s pipeline for job %s (pdf=%s, output_dir=%s)",
@@ -397,6 +401,7 @@ def run_pipeline_task(self, job_id: str):
             job.error_message = f"{exc}\n\n{tb}"
         finally:
             db_session.commit()
+            progress.clear_cancel()
             progress.publish_terminal(
                 status=job.status.value,
                 phase=job.progress_phase or "done",

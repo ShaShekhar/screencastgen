@@ -23,6 +23,25 @@ class JobProgressReporter:
         self.db_session = db_session
         self._redis = redis.Redis.from_url(settings.REDIS_URL)
 
+    @property
+    def _cancel_key(self) -> str:
+        return f"job:{self.job_id}:cancel"
+
+    def is_cancelled(self) -> bool:
+        """Return True once a stop has been requested for this job."""
+        try:
+            return self._redis.get(self._cancel_key) is not None
+        except Exception:
+            logger.exception("Failed to read cancel flag for job %s", self.job_id)
+            return False
+
+    def clear_cancel(self) -> None:
+        """Drop any stale stop request so a later re-run isn't cancelled."""
+        try:
+            self._redis.delete(self._cancel_key)
+        except Exception:
+            logger.exception("Failed to clear cancel flag for job %s", self.job_id)
+
     def handle_event(self, event: PipelineEvent) -> None:
         """Update DB state and publish a progress event."""
         from ..models import Job
@@ -34,6 +53,12 @@ class JobProgressReporter:
                 job.progress_current = event.current
                 job.progress_total = event.total
                 job.progress_phase = event.phase
+                # Persist per-page lip-sync timing so a browser reload mid-run
+                # still shows the pages completed so far.
+                if event.data and event.data.get("event") == "page_done":
+                    cfg = dict(job.config_json or {})
+                    cfg["lipsync_progress"] = event.data
+                    job.config_json = cfg
                 self.db_session.commit()
         except Exception:
             logger.exception("Failed to persist progress for job %s", self.job_id)
@@ -49,6 +74,7 @@ class JobProgressReporter:
             "current": event.current,
             "total": event.total,
             "message": event.message,
+            "data": event.data,
         }
         logger.info("progress %s", payload)
         try:

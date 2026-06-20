@@ -2,9 +2,11 @@
 
 from uuid import UUID
 
+import redis
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
+from ..config import settings
 from ..database import async_session_factory
 from ..models import Job, JobStatus, PipelineType, UploadedFile
 from ..schemas import JobCreateRequest, JobListResponse, JobResponse
@@ -143,6 +145,31 @@ async def delete_job(job_id: UUID):
         await session.commit()
 
     return {"detail": "deleted"}
+
+
+@router.post("/jobs/{job_id}/stop")
+async def stop_job(job_id: UUID):
+    """Request that a running lip-sync job stop.
+
+    The page currently generating on the GPU is abandoned; the worker then
+    builds the reader output from the pages already completed.
+    """
+    async with async_session_factory() as session:
+        job = await session.get(Job, job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        if job.pipeline_type != PipelineType.lipsync:
+            raise HTTPException(400, "Stop is only supported for lip-sync jobs")
+        if job.status not in (JobStatus.pending, JobStatus.running):
+            raise HTTPException(400, "Job is not running")
+
+    # The running worker polls this Redis flag between/within pages.
+    client = redis.Redis.from_url(settings.REDIS_URL)
+    try:
+        client.set(f"job:{job_id}:cancel", "1", ex=86400)
+    finally:
+        client.close()
+    return {"detail": "stop requested"}
 
 
 @router.get("/jobs/{job_id}/download")

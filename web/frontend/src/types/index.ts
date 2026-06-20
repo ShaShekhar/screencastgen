@@ -31,6 +31,21 @@ export interface JobListResponse {
   total: number;
 }
 
+export interface LipsyncPageTime {
+  page: number;
+  seconds: number;
+}
+
+export interface LipsyncProgressData {
+  event: "page_start" | "page_progress" | "page_done";
+  page: number;
+  completed: number;
+  total: number;
+  elapsed?: number;
+  seconds?: number;
+  page_times?: LipsyncPageTime[];
+}
+
 export interface ProgressEvent {
   job_id: string;
   status: string;
@@ -38,6 +53,7 @@ export interface ProgressEvent {
   current: number;
   total: number;
   message: string;
+  data?: LipsyncProgressData | null;
 }
 
 export interface AudioConfig {

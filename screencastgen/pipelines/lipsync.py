@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable, List, Optional
@@ -131,8 +132,12 @@ def run_lipsync_pipeline(
             return PipelineRunResult(exit_code=1, error_message=msg)
 
         reporter.phase_start("lipsync", "\n=== LIP-SYNC GENERATION ===")
-        lipsync_clips = []
+        lipsync_clips: List[str] = []
         lipsync_failed = False
+        stopped_early = False
+        page_times: List[dict] = []
+        total_pages = len(aligned_chunks)
+
         for aligned_chunk in aligned_chunks:
             video_path = os.path.join(
                 request.output_dir,
@@ -144,22 +149,50 @@ def run_lipsync_pipeline(
                 lipsync_clips.append(video_path)
                 continue
 
+            # Honour a stop request before committing the GPU to another page.
+            if reporter.cancelled():
+                stopped_early = True
+                reporter.line("  Stop requested — finishing with the pages completed so far.")
+                break
+
+            page_num = aligned_chunk.chunk_num
             reporter.line(
-                f"  Generating lip-sync for chunk {aligned_chunk.chunk_num}{'  (remote)' if gpu_url else ''}..."
+                f"  Generating lip-sync for page {page_num}{'  (remote)' if gpu_url else ''}..."
             )
-            reporter.emit(phase="lipsync", current=aligned_chunk.chunk_num, total=len(aligned_chunks))
+            page_start = time.monotonic()
+            reporter.emit(
+                phase="lipsync", current=page_num, total=total_pages,
+                data={
+                    "event": "page_start", "page": page_num,
+                    "completed": len(lipsync_clips), "total": total_pages,
+                },
+            )
             try:
                 if gpu_url:
-                    from ..remote_gpu import remote_generate_lipsync
+                    from ..remote_gpu import LipsyncCancelled, remote_generate_lipsync
 
-                    remote_generate_lipsync(
-                        audio_path=aligned_chunk.audio_path,
-                        reference_video_path=request.ref_video,
-                        output_path=video_path,
-                        server_url=gpu_url,
-                        provider=lipsync_provider,
-                        latentsync_preset=request.latentsync_preset,
-                    )
+                    try:
+                        remote_generate_lipsync(
+                            audio_path=aligned_chunk.audio_path,
+                            reference_video_path=request.ref_video,
+                            output_path=video_path,
+                            server_url=gpu_url,
+                            provider=lipsync_provider,
+                            latentsync_preset=request.latentsync_preset,
+                            should_cancel=reporter.should_cancel,
+                            on_status=lambda elapsed, p=page_num: reporter.emit(
+                                phase="lipsync", current=p, total=total_pages,
+                                data={
+                                    "event": "page_progress", "page": p,
+                                    "elapsed": round(elapsed, 1),
+                                    "completed": len(lipsync_clips), "total": total_pages,
+                                },
+                            ),
+                        )
+                    except LipsyncCancelled:
+                        stopped_early = True
+                        reporter.line(f"  Stop requested — page {page_num} aborted.")
+                        break
                 else:
                     from ..lipsync import generate_lipsync_video
 
@@ -175,22 +208,65 @@ def run_lipsync_pipeline(
                         output_path=video_path,
                         **kwargs,
                     )
+                elapsed = round(time.monotonic() - page_start, 1)
                 tracker.mark_video_rendered(aligned_chunk.chunk_num, video_path)
                 lipsync_clips.append(video_path)
+                page_times.append({"page": page_num, "seconds": elapsed})
+                reporter.line(f"  Page {page_num} done in {elapsed:.0f}s.")
+                reporter.emit(
+                    phase="lipsync", current=page_num, total=total_pages,
+                    data={
+                        "event": "page_done", "page": page_num, "seconds": elapsed,
+                        "completed": len(lipsync_clips), "total": total_pages,
+                        "page_times": list(page_times),
+                    },
+                )
             except Exception as exc:
-                reporter.line(f"  Lip-sync error for chunk {aligned_chunk.chunk_num}: {exc}")
+                reporter.line(f"  Lip-sync error for page {page_num}: {exc}")
                 lipsync_failed = True
 
         if lipsync_failed:
-            msg = "Lipsync pipeline failed: one or more video chunks did not render."
+            msg = "Lipsync pipeline failed: one or more video pages did not render."
             print(msg, file=sys.stderr)
             return PipelineRunResult(exit_code=1, error_message=msg)
 
+        if not lipsync_clips:
+            msg = (
+                "Lip-sync was stopped before any pages were generated."
+                if stopped_early
+                else "No lip-sync pages were produced."
+            )
+            print(msg, file=sys.stderr)
+            return PipelineRunResult(exit_code=1, error_message=msg)
+
+        # On an early stop, build the output only from the pages that completed;
+        # the clips list and aligned_chunks stay index-aligned because the loop
+        # appends in order and breaks on cancellation.
+        built_chunks = aligned_chunks[: len(lipsync_clips)] if stopped_early else aligned_chunks
+
         if fmt == "epub":
-            return build_lipsync_epub(request, aligned_chunks, lipsync_clips, tracker, reporter=reporter)
-        if fmt == "reader":
-            return build_lipsync_reader(request, aligned_chunks, lipsync_clips, tracker, reporter=reporter)
-        return build_lipsync_mp4(request, aligned_chunks, lipsync_clips, pdf_words=pdf_words, reporter=reporter)
+            result = build_lipsync_epub(
+                request, built_chunks, lipsync_clips, tracker, reporter=reporter
+            )
+        elif fmt == "reader":
+            result = build_lipsync_reader(
+                request, built_chunks, lipsync_clips, tracker,
+                reporter=reporter, stopped_early=stopped_early,
+            )
+        else:
+            result = build_lipsync_mp4(
+                request, built_chunks, lipsync_clips, pdf_words=pdf_words, reporter=reporter
+            )
+
+        if result.exit_code == 0:
+            result.metadata = {
+                **(result.metadata or {}),
+                "lipsync_stopped_early": stopped_early,
+                "lipsync_pages_completed": len(lipsync_clips),
+                "lipsync_pages_total": total_pages,
+                "lipsync_page_times": page_times,
+            }
+        return result
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return PipelineRunResult(exit_code=1, error_message=str(exc))
@@ -390,6 +466,7 @@ def build_lipsync_reader(
     tracker,
     *,
     reporter: Optional[PipelineReporter] = None,
+    stopped_early: bool = False,
 ) -> PipelineRunResult:
     """Build the reader bundle: manifest + audio + page images + presenter video.
 
@@ -402,7 +479,14 @@ def build_lipsync_reader(
 
     reporter.phase_start("presenter", "\n=== BUILDING PRESENTER VIDEO ===")
     presenter_path = os.path.join(request.output_dir, PRESENTER_NAME)
-    if tracker.is_presenter_built() and os.path.isfile(presenter_path) and not request.clean:
+    # A cached presenter covers every page; rebuild it when an early stop means
+    # the output should only span the pages that actually completed.
+    if (
+        tracker.is_presenter_built()
+        and os.path.isfile(presenter_path)
+        and not request.clean
+        and not stopped_early
+    ):
         reporter.line(f"  Presenter video already built: {presenter_path}")
     else:
         presenter_path = _build_presenter_video(
