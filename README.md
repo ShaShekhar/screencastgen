@@ -108,10 +108,31 @@ screencastgen highlight MyBook.pdf --backend remote --tts-server-url http://gpu-
 ```
 
 The inference server exposes these endpoints:
-- `POST /synthesize` — Text to audio (TTS)
-- `POST /align` — Audio + text to word-level timestamps (selected alignment provider)
-- `POST /lipsync` — Audio + reference video to lip-synced video (selected lip-sync provider)
-- `GET /health` — Backend info and readiness
+
+| Method and path | Purpose |
+|-----------------|---------|
+| `POST /synthesize` | Convert text to audio with the selected TTS backend |
+| `POST /transcribe` | Transcribe uploaded audio |
+| `POST /align` | Align audio and text to word-level timestamps |
+| `POST /lipsync` | Upload audio and a reference video, queue a lip-sync job, and return its ID |
+| `GET /lipsync/{id}` | Read job status, elapsed generation time, and any error |
+| `GET /lipsync/{id}/result` | Download the completed MP4 |
+| `POST /lipsync/{id}/cancel` | Request cancellation and discard an in-flight result |
+| `DELETE /lipsync/{id}` | Remove the job record and its generated output |
+| `GET /health` | Read backend information and readiness |
+
+Lip-sync submissions return immediately with a JSON handle such as
+`{"lipsync_id": "...", "status": "queued"}`. Clients poll until the job is
+`done`, `failed`, or `cancelled`, then download and delete the result. GPU
+generation is serialized on the server so concurrent submissions queue instead
+of competing for VRAM. The client has no overall generation deadline; individual
+HTTP operations still have timeouts, and transient polling failures are retried.
+
+Cancellation is cooperative. A queued job is skipped. If model inference has
+already started, it may continue on the GPU, but its result is discarded and the
+calling pipeline can proceed using pages that completed earlier. The remote
+client remains compatible with older servers that return the generated MP4
+directly from `POST /lipsync`.
 
 `GET /health` also reports the loaded TTS backend plus the server defaults for `aligner` and `lipsync_provider`.
 
@@ -156,9 +177,10 @@ CPU VM                                        GPU VM (screencastgen-server)
 | Chunking & validation    | ------------> |   Qwen3-TTS on CUDA     |
 | RemoteTTS.synthesize()   |               |                          |
 | remote_align_chunk()     | ------------> | POST /align              |
-| remote_generate_lipsync()| <------------ |   Alignment provider     |
+| remote_generate_lipsync()| <-----------> |   Alignment provider     |
 | Video compositing        |               | POST /lipsync            |
-| Audio concatenation      |               |   Lip-sync provider      |
+| Audio concatenation      |               | GET status/result        |
+| Per-page progress/stop   |               |   Lip-sync provider      |
 | Web app / Celery / DB    |               +--------------------------+
 +--------------------------+
 ```
@@ -280,7 +302,15 @@ For highlight/lipsync pipelines, additional steps run after synthesis:
 - **Align** audio with the selected alignment provider for word-level timestamps
 - **PDF inputs**: extract PyMuPDF word bounding boxes, match aligned words back to page positions, and render highlighted PDF page images
 - **Other inputs / fallback**: render highlighted text on a plain background
-- **Lip-sync**: composite the highlighted content with the selected face animation provider
+- **Lip-sync**: generate each page with the selected face animation provider, reporting per-page elapsed time, then build the final output
+
+The lip-sync pipeline accepts a cooperative stop request from its host. With a
+remote GPU, the page currently in progress is abandoned from the pipeline's
+perspective; with local inference, cancellation is observed between pages. If at
+least one page has completed, the final reader/video is built from that completed
+prefix and result metadata records the completed and total page counts plus page
+timings. Stopping before any page completes produces a failed run because there
+is no usable output to build.
 
 The remote GPU path preserves the same abstraction: the CPU-side client sends provider names to the server, and the server executes its configured default provider or an explicit per-request override.
 
@@ -308,6 +338,23 @@ P2A_STORAGE_BACKEND=local
 ```
 
 By default files are stored on the local filesystem. Set `P2A_STORAGE_BACKEND` to `gcs` or `s3` to store uploads and outputs in a cloud bucket. Pipelines always work against local directories; the storage layer handles downloading inputs and uploading outputs to the bucket.
+
+### Lip-sync progress and stopping
+
+The Job Detail page displays completed-page timings, a live timer for the page
+currently generating, and total time spent. Completed timing data is persisted
+with the job so it survives a browser reload; live events continue over SSE.
+
+Selecting **Stop & build from completed pages** first opens an inline
+confirmation warning to prevent accidental clicks. The user can either keep the
+job running or confirm the stop. The worker stores the request in Redis, the
+pipeline stops at the next supported cancellation point, and the output is built
+from completed pages. A successfully shortened result is marked **Stopped early**
+with its completed and total page counts.
+
+The lip-sync setup screen also includes a reader-style preview. It uses the saved
+reader theme and lets the presenter picture-in-picture be dragged within the
+preview; the configured face position remains its initial placement.
 
 See [CLAUDE.md](CLAUDE.md) for local dev setup and architecture details.
 

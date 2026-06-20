@@ -26,6 +26,10 @@ export async function deleteJob(id: string): Promise<void> {
   await api.delete(`/jobs/${id}`);
 }
 
+export async function stopJob(id: string): Promise<void> {
+  await api.post(`/jobs/${id}/stop`);
+}
+
 export function getDownloadUrl(id: string): string {
   return `/api/jobs/${id}/download`;
 }

@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { deleteJob, getDownloadUrl, getJob } from "../api/jobs";
 import { getReaderStatus } from "../api/reader";
+import LipsyncRunPanel from "../components/LipsyncRunPanel";
 import ProgressBar from "../components/ProgressBar";
 import { useJobProgress } from "../hooks/useJobProgress";
-import { Job, JobStatus } from "../types";
+import { Job, JobStatus, LipsyncPageTime } from "../types";
 
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
@@ -25,6 +26,20 @@ function getVisualizationResult(job: Job): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function getLipsyncResult(job: Job): Record<string, unknown> | null {
+  const value = job.config_json.pipeline_result;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getInitialPageTimes(job: Job): LipsyncPageTime[] {
+  const lp = job.config_json.lipsync_progress as
+    | { page_times?: LipsyncPageTime[] }
+    | undefined;
+  return Array.isArray(lp?.page_times) ? (lp!.page_times as LipsyncPageTime[]) : [];
 }
 
 export default function JobDetail() {
@@ -129,6 +144,13 @@ export default function JobDetail() {
 
   const visualizationResult =
     job.pipeline_type === "visualization" ? getVisualizationResult(job) : null;
+  const lipsyncResult =
+    job.pipeline_type === "lipsync" ? getLipsyncResult(job) : null;
+  const lipsyncStoppedEarly = lipsyncResult?.lipsync_stopped_early === true;
+  const lipsyncPagesCompleted = Number(
+    lipsyncResult?.lipsync_pages_completed ?? 0,
+  );
+  const lipsyncPagesTotal = Number(lipsyncResult?.lipsync_pages_total ?? 0);
   const generatedCode =
     typeof visualizationResult?.generated_code === "string"
       ? visualizationResult.generated_code
@@ -189,6 +211,13 @@ export default function JobDetail() {
             phase={job.progress_phase}
             status={job.status}
           />
+          {job.pipeline_type === "lipsync" && id && (
+            <LipsyncRunPanel
+              jobId={id}
+              progress={progress}
+              initialPageTimes={getInitialPageTimes(job)}
+            />
+          )}
         </div>
       )}
 
@@ -255,6 +284,12 @@ export default function JobDetail() {
               }`}
             >
               {readerMessage}
+            </p>
+          )}
+          {lipsyncStoppedEarly && (
+            <p className="mt-3 text-sm text-amber-700">
+              Stopped early — this video covers {lipsyncPagesCompleted} of{" "}
+              {lipsyncPagesTotal} page{lipsyncPagesTotal === 1 ? "" : "s"}.
             </p>
           )}
         </div>
