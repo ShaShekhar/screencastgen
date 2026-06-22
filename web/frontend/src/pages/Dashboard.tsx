@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listJobs } from "../api/jobs";
 import JobCard from "../components/JobCard";
-import { Job, JobStatus } from "../types";
+import { Job } from "../types";
 
 const FILTERS: { label: string; value: string | undefined }[] = [
   { label: "All", value: undefined },

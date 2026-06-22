@@ -171,20 +171,22 @@ def _download_models(args) -> None:
 
     print(f"\n--- Downloading Qwen3-TTS model: {model_name} ---")
     try:
-        import torch
-        from qwen_tts import Qwen3TTSModel
+        from pathlib import Path
 
-        print(f"Loading {model_name}...")
-        Qwen3TTSModel.from_pretrained(
-            model_name,
-            device_map="cpu",
-            dtype=torch.float32,
-        )
+        from huggingface_hub import snapshot_download
+
+        if Path(model_name).expanduser().exists():
+            print(f"Using local model at {Path(model_name).expanduser().resolve()}")
+            return
+        print(f"Downloading {model_name}...")
+        snapshot_download(repo_id=model_name)
         print("Qwen3-TTS model ready.")
-    except ImportError:
-        print("ERROR: qwen-tts not installed. Run: pip install 'screencastgen[qwen]'")
+    except ImportError as exc:
+        raise RuntimeError(
+            "huggingface-hub is not installed; install the qwen extra first"
+        ) from exc
     except Exception as exc:
-        print(f"ERROR downloading Qwen3-TTS model: {exc}")
+        raise RuntimeError(f"failed to download Qwen3-TTS model: {exc}") from exc
 
 
 _MODEL_ARG = BackendArg(

@@ -240,6 +240,16 @@ def _build_parser() -> argparse.ArgumentParser:
     dm_p = sub.add_parser("download-models", help="Pre-download ML model weights")
     register_model_download_args(dm_p)
 
+    doctor_p = sub.add_parser("doctor", help="Check installation and runtime prerequisites")
+    doctor_p.add_argument(
+        "--profile",
+        choices=("auto", "local-gpu", "remote-client", "dev"),
+        default="auto",
+        help="Capability profile to check (default: auto)",
+    )
+    doctor_p.add_argument("--model", choices=("0.6B", "1.7B"), default="0.6B")
+    doctor_p.add_argument("--server-url", help="Remote GPU server URL to verify")
+
     return p
 
 
@@ -313,8 +323,19 @@ def run_download_models(args) -> int:
     """Download ML model weights."""
     from .models import download_selected_models
 
-    download_selected_models(args)
+    try:
+        download_selected_models(args)
+    except (RuntimeError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
     return 0
+
+
+def run_doctor(args) -> int:
+    """Check the active installation without changing it."""
+    from .doctor import run_doctor as _run_doctor
+
+    return _run_doctor(args.profile, args.model, args.server_url)
 
 
 def main(argv=None) -> int:
@@ -341,6 +362,7 @@ def main(argv=None) -> int:
         "lipsync": run_lipsync_pipeline,
         "visualize": run_visualization_pipeline,
         "download-models": run_download_models,
+        "doctor": run_doctor,
     }
 
     handler = dispatch.get(args.command)

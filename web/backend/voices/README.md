@@ -11,7 +11,7 @@ This directory holds reference audio clips that the web UI offers as preset voic
    - `language` — BCP-47 tag, e.g. `en-US`
    - `description` — short blurb shown under the name
    - `file` — filename relative to this directory
-   - `ref_text` — exact transcript of the WAV clip (used by Qwen3-TTS / F5-TTS for voice cloning)
+   - `ref_text` — exact transcript of the WAV clip (used by Qwen3-TTS for voice cloning)
 
 ## Notes
 

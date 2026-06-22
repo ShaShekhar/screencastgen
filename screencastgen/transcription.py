@@ -1,8 +1,8 @@
 """Audio → text transcription helper.
 
 Used to auto-generate ``ref_text`` for voice-cloning reference clips so
-Qwen3-TTS / F5-TTS can run in ICL (in-context learning) mode instead of
-falling back to speaker-embedding-only synthesis.
+Qwen3-TTS can run in ICL (in-context learning) mode instead of falling back to
+speaker-embedding-only synthesis.
 
 Imports are deferred so this module can be imported without whisperx
 installed; callers get a clear ImportError only when they actually try

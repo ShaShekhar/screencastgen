@@ -36,7 +36,7 @@ def pytest_addoption(parser):
     parser.addoption(
         "--ref-audio",
         default=None,
-        help="Path to a reference audio file for voice-cloning / F5-TTS tests.",
+        help="Path to a reference audio file for voice-cloning tests.",
     )
     parser.addoption(
         "--ref-video",
@@ -291,7 +291,7 @@ def make_lipsync_args(pdf_path, output_dir, ref_audio, ref_video, **overrides):
         status_file="processing_status.json",
         clean=True,
         verbose=False,
-        backend="f5",
+        backend="qwen",
         device="cpu",
         voice=None,
         model=None,

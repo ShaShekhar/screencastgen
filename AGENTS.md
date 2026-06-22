@@ -5,14 +5,29 @@
 
 `web/` holds the full-stack UI. `web/backend/` is a FastAPI app with Alembic migrations, routers, services, and Celery tasks. `web/frontend/` is a Vite + React + TypeScript SPA; pages live in `src/pages/`, shared UI in `src/components/`, and HTTP clients in `src/api/`.
 
+Cross-platform environment management lives in `scripts/setup.py`, while non-mutating runtime diagnostics live in `screencastgen/doctor.py`. Keep installation workflows in `INSTALLATION.md`; keep `README.md` focused on product usage and link to the installation guide instead of duplicating setup instructions.
+
 ## Build, Test, and Development Commands
-Install the package from the repo root:
+Use the managed setup from the repository root:
 
 ```bash
-pip install -e .
-pip install -e ".[highlight]"   # adds video pipeline deps
-pip install -e ".[all]"         # full local stack
+python3 scripts/setup.py --check
+python3 scripts/setup.py --profile auto
+source .venv/bin/activate
 ```
+
+On Windows PowerShell, use `py scripts/setup.py` and activate with `.venv\Scripts\Activate.ps1`. The `auto` profile selects `local-gpu` on Linux or WSL2 when `nvidia-smi` can access an NVIDIA GPU; otherwise it selects `remote-client`. Native Windows and macOS do not support the local CUDA stack. Use `--profile dev` for development without local GPU models. See `INSTALLATION.md` for manual extras, model downloads, LatentSync, remote GPU, and web setup.
+
+Validate the active environment without changing it:
+
+```bash
+screencastgen doctor --profile auto
+screencastgen doctor --profile local-gpu --model 1.7B
+screencastgen doctor --profile remote-client --server-url http://gpu-vm:8100
+screencastgen doctor --profile dev
+```
+
+`doctor` returns nonzero when a required check fails. Warnings, such as omitting `--server-url` for a remote client, do not fail the command. Keep setup and doctor profile resolution consistent when adding platforms or capabilities.
 
 Run the CLI locally with `screencastgen audio book.pdf` or `python -m screencastgen highlight book.pdf`.
 
@@ -36,7 +51,16 @@ Follow existing style: 4-space indentation in Python, 2-space indentation in fro
 This repo does not currently ship formatter or linter configs. Match surrounding code closely. Preserve deferred imports for heavy optional ML dependencies so help text and lightweight installs continue to work.
 
 ## Testing Guidelines
-There is no committed automated test suite yet. Before opening a PR, run the smallest relevant manual check: the CLI command you changed, `npm run build` in `web/frontend/`, and backend startup via `make backend` for API changes. Add new tests alongside the feature when introducing test infrastructure.
+Tests live in `tests/` and use pytest. Run the smallest relevant test module first, then the complete suite when practical:
+
+```bash
+python -m pytest tests/test_setup_and_doctor.py -q
+python -m pytest -q
+```
+
+For setup or diagnostic changes, test profile selection, platform rejection, non-mutating `--check` behavior, exit codes, and remote-server capability validation. Preserve deferred imports for optional ML dependencies so tests, help text, and `doctor` can run without loading large models.
+
+Also run the relevant manual check: the CLI command you changed, `npm run build` in `web/frontend/` for frontend changes, and backend startup via `make backend` for API changes. Do not require GPU model downloads in ordinary unit tests; mock platform, executable, cache, and network detection instead.
 
 ## Commit & Pull Request Guidelines
 Git history currently uses short imperative subjects, for example `Initial commit: screencastgen project`. Keep commit titles concise and action-oriented.

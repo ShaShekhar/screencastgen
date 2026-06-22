@@ -9,6 +9,7 @@ import tempfile
 from .providers.tts.base import resolve_device
 from .providers.lipsync import (
     DEFAULT_LIPSYNC_PROVIDER,
+    get_auto_lipsync_provider,
     get_default_lipsync_provider,
     get_lipsync_provider_names,
     run_lipsync_provider,
@@ -93,66 +94,22 @@ def _run_provider(
     latentsync_preset: str,
 ):
     """Run the selected lip-sync provider."""
-    if provider == DEFAULT_LIPSYNC_PROVIDER:
-        try:
-            _run_latentsync(
-                video_path,
-                audio_path,
-                output_path,
-                device,
-                preset=latentsync_preset,
-            )
-            return
-        except ImportError:
-            try:
-                _run_wav2lip(video_path, audio_path, output_path)
-                return
-            except ImportError as exc:
-                raise ImportError(
-                    "No lip-sync backend found. Install LatentSync:\n"
-                    "  scripts/install_latentsync.sh\n"
-                    "Or set LATENTSYNC_ROOT and LATENTSYNC_PYTHON for an existing install."
-                ) from exc
-
-    if provider == "latentsync":
-        _run_latentsync(
+    auto_selected = provider == DEFAULT_LIPSYNC_PROVIDER
+    selected = get_auto_lipsync_provider() if auto_selected else provider
+    provider_kwargs = {"preset": latentsync_preset} if selected == "latentsync" else {}
+    try:
+        return run_lipsync_provider(
+            selected,
             video_path,
             audio_path,
             output_path,
-            device,
-            preset=latentsync_preset,
+            device=device,
+            **provider_kwargs,
         )
-        return
-
-    if provider == "wav2lip":
-        _run_wav2lip(video_path, audio_path, output_path)
-        return
-
-    raise ValueError(
-        f"Unknown lip-sync provider {provider!r}. "
-        f"Choose from: {', '.join(get_lipsync_provider_names())}"
-    )
-
-
-def _run_latentsync(
-    video_path: str,
-    audio_path: str,
-    output_path: str,
-    device: str,
-    *,
-    preset: str = "quality",
-):
-    """Compatibility wrapper for the LatentSync provider."""
-    return run_lipsync_provider(
-        "latentsync",
-        video_path,
-        audio_path,
-        output_path,
-        device=device,
-        preset=preset,
-    )
-
-
-def _run_wav2lip(video_path: str, audio_path: str, output_path: str):
-    """Compatibility wrapper for the Wav2Lip provider."""
-    return run_lipsync_provider("wav2lip", video_path, audio_path, output_path, device="cpu")
+    except ImportError as exc:
+        if not auto_selected:
+            raise
+        raise ImportError(
+            f"Auto-selected lip-sync provider {selected!r} is not configured. "
+            "Install its runtime or select another registered provider."
+        ) from exc

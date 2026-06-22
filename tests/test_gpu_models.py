@@ -327,7 +327,7 @@ class TestWhisperXAlignment:
 # ===================================================================
 
 class TestLipSync:
-    """Test LatentSync/Wav2Lip model — generate lip-synced video from audio + face."""
+    """Test LatentSync generation from audio and a face video."""
 
     @pytest.fixture
     def ref_video_required(self, ref_video_path):

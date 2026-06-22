@@ -31,6 +31,3 @@ python-multipart>=0.0.6
 # - LatentSync is not distributed as a normal PyPI dependency for this project flow.
 #   Install it from its repo when using the lip-sync pipeline:
 #   https://github.com/bytedance/LatentSync
-# - Wav2Lip is optional and only needed when using --lipsync-provider wav2lip.
-# - F5-TTS is optional and not included in this default stack because its
-#   Python 3.10 NumPy cap conflicts with current WhisperX releases.

@@ -27,9 +27,6 @@ DEFAULT_HIGHLIGHT_COLOR = (255, 255, 0)  # yellow
 DEFAULT_TEXT_COLOR = (255, 255, 255)  # white
 DEFAULT_BG_COLOR = (30, 30, 30)  # dark gray
 
-# Voice cloning
-DEFAULT_CLONE_CHUNK_BYTES = 4000
-
 # Model cache
 DEFAULT_MODEL_CACHE = "~/.cache/screencastgen/models"
 

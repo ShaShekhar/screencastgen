@@ -19,7 +19,6 @@ import pytest
 from screencastgen.providers.tts import BACKEND_NAMES, create_backend
 from screencastgen.concatenator import _find_chunk_files, concatenate
 from screencastgen.constants import (
-    DEFAULT_CLONE_CHUNK_BYTES,
     LONG_SENTENCE_THRESHOLD,
     MAX_CHUNK_BYTES,
     MAX_TTS_BYTES,
@@ -472,9 +471,7 @@ class TestConcatenation:
 class TestBackendRegistry:
 
     def test_backend_names(self):
-        assert "qwen" in BACKEND_NAMES
-        assert "f5" in BACKEND_NAMES
-        assert "remote" in BACKEND_NAMES
+        assert BACKEND_NAMES == ["qwen", "remote"]
 
     def test_unknown_backend_raises(self):
         with pytest.raises(ValueError, match="Unknown backend"):

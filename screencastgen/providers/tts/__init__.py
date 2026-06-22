@@ -6,7 +6,6 @@ from .base import BackendSpec
 
 _BACKEND_MODULES: Dict[str, str] = {
     "qwen": "screencastgen.providers.tts.qwen_backend",
-    "f5": "screencastgen.providers.tts.f5_tts",
     "remote": "screencastgen.providers.tts.remote_tts",
 }
 

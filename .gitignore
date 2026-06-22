@@ -25,10 +25,16 @@ build/
 
 # Virtual environments
 .venv/
+.venvs/
 venv/
 env/
+external/
 output/
 docs/
+
+# Frontend dependencies and generated output
+web/frontend/node_modules/
+web/frontend/dist/
 
 # IDE
 .idea/

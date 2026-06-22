@@ -1,6 +1,5 @@
 """Model download and cache management."""
 
-import os
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
@@ -23,13 +22,6 @@ class ModelPackageSpec:
     download_args: Sequence[BackendArg] = ()
 
 
-def _get_cache_dir() -> str:
-    cache = os.environ.get("SCREENCASTGEN_MODEL_CACHE", "~/.cache/screencastgen/models")
-    path = os.path.expanduser(cache)
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
 def _download_whisperx(args) -> None:
     print("\n--- Downloading WhisperX models ---")
     try:
@@ -38,10 +30,10 @@ def _download_whisperx(args) -> None:
         print("Loading alignment model...")
         load_whisperx_align_model(language_code="en", device="cpu")
         print("WhisperX models ready.")
-    except ImportError:
-        print("ERROR: whisperx not installed. Run: pip install whisperx")
+    except ImportError as exc:
+        raise RuntimeError("whisperx is not installed; install the highlight extra first") from exc
     except Exception as exc:
-        print(f"ERROR downloading WhisperX models: {exc}")
+        raise RuntimeError(f"failed to download WhisperX models: {exc}") from exc
 
 
 def _download_latentsync(args) -> None:
@@ -55,13 +47,12 @@ def _download_latentsync(args) -> None:
             audio_checkpoint=getattr(args, "latentsync_audio_checkpoint", "whisper/tiny.pt"),
         )
         print("LatentSync checkpoints downloaded.")
-    except ImportError:
-        print(
-            "ERROR: LatentSync runtime not configured.\n"
-            "Set LATENTSYNC_ROOT and LATENTSYNC_PYTHON, or run scripts/install_latentsync.sh."
-        )
+    except ImportError as exc:
+        raise RuntimeError(
+            "LatentSync runtime is not configured; run scripts/install_latentsync.sh first"
+        ) from exc
     except Exception as exc:
-        print(f"ERROR downloading LatentSync models: {exc}")
+        raise RuntimeError(f"failed to download LatentSync models: {exc}") from exc
 
 
 _LATENTSYNC_DOWNLOAD_ARGS = (
@@ -165,11 +156,7 @@ def download_selected_models(args) -> None:
         selected_packages = get_downloadable_package_names()
 
     if not selected_backends and not selected_packages:
-        print("No models specified. Use --backend, --package, or --all")
-        return
-
-    cache_dir = _get_cache_dir()
-    print(f"Model cache directory: {cache_dir}")
+        raise ValueError("no models specified; use --backend, --package, or --all")
 
     for name in selected_packages:
         _PACKAGE_SPECS[name].download_models(args)

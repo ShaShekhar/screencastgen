@@ -18,6 +18,16 @@ qwen = [
     "soundfile>=0.12",
 ]
 pydub = ["pydub>=0.25"]
+client = [
+    "pydub>=0.25",
+    "moviepy>=2.0",
+    "Pillow>=10.0",
+    "pymupdf>=1.24",
+]
+dev = [
+    "pytest>=7.0",
+    "reportlab>=4.0",
+]
 epub = [
     "pydub>=0.25",
     "whisperx==3.8.5",
@@ -45,7 +55,6 @@ lipsync = [
     "torchcodec>=0.6,<0.8",
     "pymupdf>=1.24",
 ]
-f5 = ["f5-tts>=1.0"]
 server = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.20",
@@ -67,7 +76,7 @@ web = [
 ]
 gcs = ["google-cloud-storage>=2.0"]
 s3 = ["boto3>=1.26"]
-all = ["screencastgen[highlight,lipsync,qwen,server,web]"]
+all = ["screencastgen[client,highlight,lipsync,qwen,server,web]"]
 
 [tool.setuptools.packages.find]
 include = ["screencastgen*"]

@@ -8,7 +8,7 @@ screencastgen converts text documents (PDF, EPUB, plain text, and more) into aud
 
 - **`audio`** — document → text → TTS → concatenated audio file (default, also works without subcommand for backward compat)
 - **`highlight`** — Same as audio, plus WhisperX alignment → word-highlighted video (moviepy). For PDF inputs, highlights words on the actual page images; for other inputs, renders text on a plain background.
-- **`lipsync`** — document → text → voice cloning TTS → WhisperX alignment → LatentSync/Wav2Lip face animation → composite video with highlighted text. Face overlay composited on PDF page images (or plain text frames).
+- **`lipsync`** — document → text → voice cloning TTS → WhisperX alignment → LatentSync face animation → composite video with highlighted text. Face overlay composited on PDF page images (or plain text frames).
 
 ## Commands
 
@@ -17,7 +17,7 @@ screencastgen converts text documents (PDF, EPUB, plain text, and more) into aud
 pip install -e .                    # core only (PyPDF2)
 pip install -e ".[qwen]"           # + Qwen3-TTS, torch, soundfile
 pip install -e ".[highlight]"       # + WhisperX, moviepy, Pillow, torch
-pip install -e ".[lipsync]"         # + F5-TTS
+pip install -e ".[lipsync]"         # + local lip-sync pipeline dependencies
 pip install -e ".[server]"          # GPU inference server (all ML deps + FastAPI)
 pip install -e ".[gcs]"            # + Google Cloud Storage backend
 pip install -e ".[s3]"             # + Amazon S3 backend
@@ -26,7 +26,7 @@ pip install -e ".[all]"             # everything
 # Run (local GPU)
 screencastgen audio MyBook.pdf --backend qwen --device cuda
 screencastgen highlight MyBook.pdf --backend qwen
-screencastgen lipsync MyBook.pdf --backend f5 --ref-audio x.wav --ref-video face.mp4
+screencastgen lipsync MyBook.pdf --backend qwen --ref-audio x.wav --ref-video face.mp4
 
 # Run (remote GPU server)
 screencastgen audio MyBook.pdf --backend remote --tts-server-url http://gpu-vm:8100
@@ -36,8 +36,12 @@ screencastgen highlight MyBook.pdf --backend remote --tts-server-url http://gpu-
 screencastgen-server --backend qwen --device cuda
 
 # Pre-download models
-screencastgen download-models --qwen
+screencastgen download-models --backend qwen
 screencastgen download-models --all
+
+# Cross-platform managed setup and diagnostics
+python scripts/setup.py --profile auto
+screencastgen doctor --profile auto
 
 # Module invocation
 python -m screencastgen audio MyBook.pdf
@@ -51,11 +55,11 @@ The shared pipeline (steps 1–5 in `cli.py`) is: extract → preprocess → spl
 
 **Key design patterns:**
 
-- **Deferred imports**: Heavy deps (torch, whisperx, moviepy, f5-tts, qwen-tts, latentsync, pymupdf) are imported inside functions, not at module top. This lets `screencastgen --help` work without all deps installed. Maintain this pattern.
+- **Deferred imports**: Heavy deps (torch, whisperx, moviepy, qwen-tts, latentsync, pymupdf) are imported inside functions, not at module top. This lets `screencastgen --help` work without all deps installed. Maintain this pattern.
 - **Page-image rendering**: For PDF inputs, `PageRenderer` rasterises actual PDF pages and highlights words at their real bounding-box positions. `WordMatcher` maps WhisperX-aligned words back to PDF bounding boxes via sequential normalised matching. Falls back to `HighlightRenderer` (plain text on dark background) for non-PDF inputs or when PyMuPDF is not installed.
 - **Resumable processing**: `ProcessingTracker` persists state to a JSON file (`processing_status.json`). Chunks are keyed by number + MD5 hash, so re-runs skip already-completed work. The tracker also stores alignment and video rendering state.
-- **TTSBackend protocol**: `types.py` defines a `TTSBackend` Protocol with `synthesize(text, output_path)`, `max_chunk_bytes`, and `output_format` properties. TTS providers (`QwenTTS`, `F5TTSBackend`, `RemoteTTS`) live under `screencastgen/providers/tts/`.
-- **TTS registry**: `providers/tts/__init__.py` has a lazy-import registry. `create_backend(name, **kwargs)` instantiates any backend by name (`qwen`, `f5`, `remote`).
+- **TTSBackend protocol**: `types.py` defines a `TTSBackend` Protocol with `synthesize(text, output_path)`, `max_chunk_bytes`, and `output_format` properties. TTS providers (`QwenTTS`, `RemoteTTS`) live under `screencastgen/providers/tts/`.
+- **TTS registry**: `providers/tts/__init__.py` has a lazy-import registry. `create_backend(name, **kwargs)` instantiates any registered backend (`qwen`, `remote`).
 - **Byte-based limits**: All chunk/sentence sizing uses UTF-8 byte length (not character count). Each backend declares its own `max_chunk_bytes` property. Constants in `constants.py` provide defaults.
 - **CPU/GPU VM split**: The `remote` backend delegates TTS, WhisperX alignment, and lip-sync generation to a GPU inference server (`inference_server.py`) over HTTP. Lip-sync uses an asynchronous submit/status/result/delete protocol; the server serializes GPU generation, while `remote_gpu.py` polls without an overall generation timeout and supports cooperative cancellation. The CPU VM only needs PyPDF2 + stdlib.
 - **Structured pipeline events**: `PipelineReporter` emits phase/current/total/message fields plus an optional `data` payload. Lip-sync uses the payload for page start, elapsed-time progress, page completion, and accumulated timings. Hosts can also provide `should_cancel`; pipeline code polls it at safe cancellation points.
@@ -69,7 +73,7 @@ The shared pipeline (steps 1–5 in `cli.py`) is: extract → preprocess → spl
 | Qwen3 TTS      | qwen-tts, torch, soundfile                      |
 | Concatenation   | pydub (preferred) or ffmpeg CLI                 |
 | Highlight video | whisperx, moviepy, Pillow, torch, pymupdf       |
-| Lip-sync video  | f5-tts, pymupdf, latentsync (or wav2lip), ffmpeg/ffprobe |
+| Lip-sync video  | qwen-tts, pymupdf, latentsync, ffmpeg/ffprobe |
 | GPU server      | fastapi, uvicorn, python-multipart              |
 | Web app         | fastapi, sqlalchemy, celery, redis, asyncpg      |
 | Web frontend    | react, react-router-dom, axios, tailwindcss       |

@@ -106,10 +106,24 @@ class TestLoopVideo:
 # Lip-Sync Video Generation (mocked)
 # ===================================================================
 
+class TestLipsyncProviderRegistry:
+
+    def test_only_supported_providers_are_registered(self):
+        from screencastgen.providers.lipsync import get_lipsync_provider_names
+
+        assert get_lipsync_provider_names() == ["auto", "latentsync"]
+
+    def test_latentsync_spec_uses_standard_callable(self):
+        from screencastgen.providers.lipsync import get_lipsync_provider_spec
+
+        spec = get_lipsync_provider_spec("latentsync")
+        assert spec.function_name == "run_latentsync"
+
+
 class TestGenerateLipsyncVideo:
 
-    def test_uses_latentsync_first(self, tmp_path):
-        """Should try LatentSync before Wav2Lip."""
+    def test_auto_uses_latentsync(self, tmp_path):
+        """Auto mode should select LatentSync."""
         from screencastgen.lipsync import generate_lipsync_video
 
         audio = str(tmp_path / "audio.wav")
@@ -125,7 +139,7 @@ class TestGenerateLipsyncVideo:
 
         with patch("screencastgen.lipsync._get_audio_duration", return_value=1.0), \
              patch("screencastgen.lipsync._loop_video_to_duration") as mock_loop, \
-             patch("screencastgen.lipsync._run_latentsync") as mock_ls, \
+             patch("screencastgen.lipsync.run_lipsync_provider") as mock_ls, \
              patch("screencastgen.lipsync.os.path.exists", return_value=True), \
              patch("screencastgen.lipsync.os.unlink"):
 
@@ -133,33 +147,14 @@ class TestGenerateLipsyncVideo:
             result = generate_lipsync_video(audio, ref_video, output, device="cpu")
 
         mock_ls.assert_called_once()
+        provider_args, provider_kwargs = mock_ls.call_args
+        assert provider_args[0] == "latentsync"
+        assert provider_args[2:] == (audio, output)
+        assert provider_kwargs == {"device": "cpu", "preset": "quality"}
         assert result == output
 
-    def test_falls_back_to_wav2lip(self, tmp_path):
-        """When LatentSync raises ImportError, fall back to Wav2Lip."""
-        from screencastgen.lipsync import generate_lipsync_video
-
-        audio = str(tmp_path / "audio.wav")
-        _make_wav(audio, duration_s=1.0)
-        ref_video = str(tmp_path / "face.mp4")
-        with open(ref_video, "wb") as f:
-            f.write(b"\x00" * 100)
-        output = str(tmp_path / "output.mp4")
-
-        with patch("screencastgen.lipsync._get_audio_duration", return_value=1.0), \
-             patch("screencastgen.lipsync._loop_video_to_duration") as mock_loop, \
-             patch("screencastgen.lipsync._run_latentsync", side_effect=ImportError), \
-             patch("screencastgen.lipsync._run_wav2lip") as mock_w2l, \
-             patch("screencastgen.lipsync.os.path.exists", return_value=True), \
-             patch("screencastgen.lipsync.os.unlink"):
-
-            mock_loop.return_value = str(tmp_path / "looped.mp4")
-            result = generate_lipsync_video(audio, ref_video, output, device="cpu")
-
-        mock_w2l.assert_called_once()
-
     def test_raises_if_no_backend(self, tmp_path):
-        """When both LatentSync and Wav2Lip fail, raise ImportError."""
+        """Auto mode should explain how to configure LatentSync."""
         from screencastgen.lipsync import generate_lipsync_video
 
         audio = str(tmp_path / "audio.wav")
@@ -171,13 +166,12 @@ class TestGenerateLipsyncVideo:
 
         with patch("screencastgen.lipsync._get_audio_duration", return_value=1.0), \
              patch("screencastgen.lipsync._loop_video_to_duration") as mock_loop, \
-             patch("screencastgen.lipsync._run_latentsync", side_effect=ImportError), \
-             patch("screencastgen.lipsync._run_wav2lip", side_effect=ImportError), \
+             patch("screencastgen.lipsync.run_lipsync_provider", side_effect=ImportError), \
              patch("screencastgen.lipsync.os.path.exists", return_value=True), \
              patch("screencastgen.lipsync.os.unlink"):
 
             mock_loop.return_value = str(tmp_path / "looped.mp4")
-            with pytest.raises(ImportError, match="No lip-sync backend"):
+            with pytest.raises(ImportError, match="Auto-selected lip-sync provider"):
                 generate_lipsync_video(audio, ref_video, output, device="cpu")
 
     def test_cleans_up_temp_looped_video(self, tmp_path):
@@ -193,7 +187,7 @@ class TestGenerateLipsyncVideo:
 
         with patch("screencastgen.lipsync._get_audio_duration", return_value=1.0), \
              patch("screencastgen.lipsync._loop_video_to_duration") as mock_loop, \
-             patch("screencastgen.lipsync._run_latentsync"), \
+             patch("screencastgen.lipsync.run_lipsync_provider"), \
              patch("screencastgen.lipsync.os.path.exists", return_value=True), \
              patch("screencastgen.lipsync.os.unlink") as mock_unlink:
 
@@ -374,7 +368,7 @@ class TestLipsyncPipelineIntegration:
         args = make_lipsync_args(
             sample_pdf_simple, tmp_path,
             ref_audio=None, ref_video=ref_video,
-            backend="f5",
+            backend="qwen",
         )
 
         result = run_lipsync_pipeline(args)
