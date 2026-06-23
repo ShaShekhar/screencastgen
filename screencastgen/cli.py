@@ -196,14 +196,14 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_tts_backend_args(ls_p)
     _add_provider_args(ls_p, include_lipsync=True)
     _add_video_args(ls_p)
-    ls_p.add_argument("-o", "--output", help="Output filename (default: <pdf-stem>_lipsync.epub)")
+    ls_p.add_argument("-o", "--output", help="Output filename (default: <document-stem>_reader.zip)")
     ls_p.add_argument("--ref-video", required=True, help="Reference face video clip (~10s)")
     ls_p.add_argument(
         "--format",
-        default="epub",
+        default="reader",
         choices=["epub", "mp4", "reader"],
-        help="Output format: epub, mp4 (baked composite), or reader "
-        "(separate presenter video + document bundle) (default: epub)",
+        help="Output format: reader (standalone offline ZIP), mp4 (baked composite), "
+        "or epub (text + narration accessibility export) (default: reader)",
     )
     ls_p.add_argument(
         "--face-position",

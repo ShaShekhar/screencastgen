@@ -37,7 +37,6 @@ export default function VoiceSettings({ config, onChange, uploadedFileId }: Prop
     highlightCfg.ref_audio_file_id ? "upload" : "bundled"
   );
   const [uploadedRefName, setUploadedRefName] = useState<string | null>(null);
-  const [autoTranscribed, setAutoTranscribed] = useState(false);
 
   // Sample preview state
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -221,35 +220,14 @@ export default function VoiceSettings({ config, onChange, uploadedFileId }: Prop
               label="Upload a reference audio clip (10–20s, mono)"
               onUploaded={(f: UploadedFile) => {
                 setUploadedRefName(f.original_name);
-                setAutoTranscribed(!!f.ref_text);
                 onChange({
                   ref_audio_file_id: f.id,
                   voice_id: null,
-                  ref_text: f.ref_text || null,
+                  ref_text: null,
                 });
               }}
             />
           )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Reference transcript
-            </label>
-            <textarea
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              rows={2}
-              placeholder="Exact words spoken in the reference clip…"
-              value={highlightCfg.ref_text || ""}
-              onChange={(e) => {
-                setAutoTranscribed(false);
-                onChange({ ref_text: e.target.value || null });
-              }}
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              {autoTranscribed
-                ? "Auto-transcribed with WhisperX — please review and correct any mistakes."
-                : "Matches the exact words in the clip. Improves voice-cloning quality."}
-            </p>
-          </div>
         </div>
       )}
 

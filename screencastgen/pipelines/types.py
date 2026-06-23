@@ -65,6 +65,7 @@ class HighlightPipelineRequest(TTSRequest):
 class LipsyncPipelineRequest(HighlightPipelineRequest):
     """Input for the lip-sync pipeline."""
 
+    format: str = "reader"
     ref_video: str = ""
     lipsync_provider: str = "auto"
     face_position: str = "bottom-right"

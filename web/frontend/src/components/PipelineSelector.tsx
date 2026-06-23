@@ -7,14 +7,14 @@ interface Props {
 
 const PIPELINES: { type: PipelineType; title: string; desc: string }[] = [
   {
-    type: "highlight",
-    title: "Highlight Text Audio",
-    desc: "Narrated audiobook with synced word-by-word highlighting as an EPUB3 reader output",
+    type: "lipsync",
+    title: "Talking-Head Reader",
+    desc: "Synchronized document, narration, and lip-synced presenter",
   },
   {
-    type: "lipsync",
-    title: "Lip-Sync Video",
-    desc: "Voice-cloned audio with a lip-synced talking head overlay",
+    type: "highlight",
+    title: "Read-Along EPUB",
+    desc: "Secondary accessibility export with synchronized text and narration",
   },
   {
     type: "visualization",

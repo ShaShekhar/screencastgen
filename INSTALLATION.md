@@ -249,5 +249,5 @@ the GPU runtime is corrected.
 | Cloud storage | google-cloud-storage or boto3 |
 | Development | pytest, reportlab |
 
-See [Model Dependencies and References](README.md#model-dependencies-and-references)
+See [Model Dependencies and References](https://github.com/ShaShekhar/screencastgen#model-dependencies-and-references)
 for upstream repositories, model cards, licenses, and citation information.

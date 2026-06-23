@@ -1,6 +1,5 @@
 """File upload endpoint."""
 
-import logging
 import mimetypes
 import os
 import uuid
@@ -14,9 +13,6 @@ from ..database import async_session_factory
 from ..models import UploadedFile
 from ..schemas import UploadResponse
 from ..services.storage import get_upload_abs_path, save_upload
-from ..services.transcribe_client import transcribe_upload
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["uploads"])
 
@@ -31,13 +27,6 @@ PREVIEW_EXTENSIONS = {
     ".ogg",
     ".ogv",
 }
-
-
-def _looks_like_audio(filename: str, content_type: str) -> bool:
-    if content_type and content_type.lower().startswith("audio/"):
-        return True
-    lower = (filename or "").lower()
-    return lower.endswith((".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"))
 
 
 def _preview_media_type(filename: str, content_type: str) -> str:
@@ -68,21 +57,13 @@ async def upload_file(file: UploadFile):
 
     content_type = file.content_type or "application/octet-stream"
 
-    ref_text: str | None = None
-    if _looks_like_audio(file.filename, content_type):
-        try:
-            local_path = get_upload_abs_path(stored_path)
-            ref_text = transcribe_upload(settings.TTS_SERVER_URL, local_path)
-        except Exception:  # noqa: BLE001
-            logger.exception("Auto-transcription failed; continuing without ref_text")
-
     db_file = UploadedFile(
         id=file_id,
         original_name=file.filename,
         stored_path=stored_path,
         size_bytes=size,
         content_type=content_type,
-        ref_text=ref_text,
+        ref_text=None,
     )
 
     async with async_session_factory() as session:
@@ -93,8 +74,7 @@ async def upload_file(file: UploadFile):
         id=file_id,
         original_name=file.filename,
         size_bytes=size,
-        content_type=db_file.content_type,
-        ref_text=ref_text,
+        content_type=content_type,
     )
 
 

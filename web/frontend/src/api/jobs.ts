@@ -1,5 +1,11 @@
 import api from "./client";
-import { Job, JobCreateRequest, JobListResponse, Mp4ExportState } from "../types";
+import {
+  EpubExportState,
+  Job,
+  JobCreateRequest,
+  JobListResponse,
+  Mp4ExportState,
+} from "../types";
 
 export async function createJob(req: JobCreateRequest): Promise<Job> {
   const resp = await api.post<Job>("/jobs", req);
@@ -46,4 +52,18 @@ export async function getMp4ExportStatus(id: string): Promise<Mp4ExportState> {
 
 export function getMp4ExportDownloadUrl(id: string): string {
   return `/api/jobs/${id}/export-mp4/download`;
+}
+
+export async function requestEpubExport(id: string): Promise<EpubExportState> {
+  const resp = await api.post<EpubExportState>(`/jobs/${id}/export-epub`);
+  return resp.data;
+}
+
+export async function getEpubExportStatus(id: string): Promise<EpubExportState> {
+  const resp = await api.get<EpubExportState>(`/jobs/${id}/export-epub/status`);
+  return resp.data;
+}
+
+export function getEpubExportDownloadUrl(id: string): string {
+  return `/api/jobs/${id}/export-epub/download`;
 }

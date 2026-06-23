@@ -3,7 +3,6 @@ export interface UploadedFile {
   original_name: string;
   size_bytes: number;
   content_type: string;
-  ref_text?: string | null;
 }
 
 export type PipelineType = "audio" | "highlight" | "lipsync" | "visualization";
@@ -156,6 +155,14 @@ export type Mp4ExportStatus = "running" | "done" | "failed" | null;
 
 export interface Mp4ExportState {
   export_status: Mp4ExportStatus;
+  export_output: string | null;
+  export_error: string | null;
+}
+
+export type EpubExportStatus = "running" | "done" | "failed" | null;
+
+export interface EpubExportState {
+  export_status: EpubExportStatus;
   export_output: string | null;
   export_error: string | null;
 }

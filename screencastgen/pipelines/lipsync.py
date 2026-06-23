@@ -48,7 +48,7 @@ def run_lipsync_pipeline(
     reporter = get_reporter(reporter)
     request = coerce_request(LipsyncPipelineRequest, request)
     factory = backend_factory or create_tts_backend
-    fmt = getattr(request, "format", "epub")
+    fmt = getattr(request, "format", "reader")
     lipsync_provider = getattr(request, "lipsync_provider", get_default_lipsync_provider())
 
     try:
@@ -280,24 +280,25 @@ def build_lipsync_epub(
     *,
     reporter: Optional[PipelineReporter] = None,
 ) -> PipelineRunResult:
-    """Assemble an EPUB3 output with lip-synced video."""
+    """Assemble a narration-and-text EPUB3 accessibility export.
+
+    The presenter is intentionally omitted. EPUB reading systems do not
+    consistently synchronize embedded video with Media Overlays; the offline
+    reader ZIP is the portable format that preserves the talking head.
+    """
     from ..epub_builder import EPUBBuilder
 
     reporter = get_reporter(reporter)
     output_name = request.output or (Path(request.pdf).stem + "_lipsync.epub")
     request.output = output_name
 
-    if tracker.is_epub_built() and not request.clean:
-        dest = os.path.join(request.output_dir, output_name)
+    dest = os.path.join(request.output_dir, output_name)
+    if tracker.is_epub_built() and os.path.isfile(dest) and not request.clean:
         reporter.line(f"\nEPUB already built: {dest}")
         return PipelineRunResult(exit_code=0, output_name=output_name, output_path=dest)
 
     reporter.phase_start("building", "\n=== BUILDING EPUB ===")
     builder = EPUBBuilder(title=build_title(request.pdf), language=request.language)
-
-    clip_map = {}
-    for aligned_chunk, clip in zip(aligned_chunks, lipsync_clips):
-        clip_map[aligned_chunk.chunk_num] = clip
 
     page_chunks: dict[int, list] = defaultdict(list)
     for aligned_chunk in aligned_chunks:
@@ -306,27 +307,8 @@ def build_lipsync_epub(
 
     for page_num in sorted(page_chunks):
         chunks_on_page = page_chunks[page_num]
-        page_clip_paths = [
-            clip_map[aligned_chunk.chunk_num]
-            for aligned_chunk in chunks_on_page
-            if aligned_chunk.chunk_num in clip_map
-        ]
+        builder.add_chapter(page_num, chunks_on_page)
 
-        video_path = None
-        if len(page_clip_paths) == 1:
-            video_path = page_clip_paths[0]
-        elif len(page_clip_paths) > 1:
-            concat_path = os.path.join(request.output_dir, f"face_page_{page_num:03d}.mp4")
-            try:
-                concatenate(request.output_dir, concat_path, ext="mp4", files=page_clip_paths)
-                video_path = concat_path
-            except Exception as exc:
-                reporter.line(f"  Warning: could not concat lipsync videos for page {page_num}: {exc}")
-                video_path = page_clip_paths[0]
-
-        builder.add_chapter(page_num, chunks_on_page, lipsync_video_path=video_path)
-
-    dest = os.path.join(request.output_dir, output_name)
     builder.build(dest)
     tracker.mark_epub_built()
     reporter.line(f"\nDone: {dest}")
@@ -468,11 +450,12 @@ def build_lipsync_reader(
     reporter: Optional[PipelineReporter] = None,
     stopped_early: bool = False,
 ) -> PipelineRunResult:
-    """Build the reader bundle: manifest + audio + page images + presenter video.
+    """Build hosted reader assets and a self-contained offline ZIP.
 
     This is the default web output — the presenter video and the document are
     delivered separately so the browser viewer can combine them flexibly.
     """
+    from ..offline_reader import build_offline_reader_archive
     from ..reader_assets import MANIFEST_NAME, PRESENTER_NAME, build_reader_assets
 
     reporter = get_reporter(reporter)
@@ -511,9 +494,16 @@ def build_lipsync_reader(
 
     _warn_on_presenter_drift(presenter_path, manifest_path, reporter)
 
-    request.output = MANIFEST_NAME
-    reporter.line(f"\nDone: {manifest_path}")
-    return PipelineRunResult(exit_code=0, output_name=MANIFEST_NAME, output_path=manifest_path)
+    output_name = request.output or (Path(request.pdf).stem + "_reader.zip")
+    if not output_name.lower().endswith(".zip"):
+        output_name += ".zip"
+    archive_path = os.path.join(request.output_dir, output_name)
+    reporter.phase_start("reader_archive", "\n=== BUILDING OFFLINE READER ===")
+    build_offline_reader_archive(manifest_path, archive_path)
+
+    request.output = output_name
+    reporter.line(f"\nDone: {archive_path}")
+    return PipelineRunResult(exit_code=0, output_name=output_name, output_path=archive_path)
 
 
 def _warn_on_presenter_drift(presenter_path: str, manifest_path: str, reporter) -> None:

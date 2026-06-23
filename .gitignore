@@ -30,7 +30,7 @@ venv/
 env/
 external/
 output/
-docs/
+site/
 
 # Frontend dependencies and generated output
 web/frontend/node_modules/

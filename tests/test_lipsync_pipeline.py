@@ -7,8 +7,10 @@ Run:
     pytest tests/test_lipsync_pipeline.py -v
 """
 
+import json
 import os
 import subprocess
+import zipfile
 from unittest.mock import MagicMock, patch, call
 
 import pytest
@@ -508,6 +510,100 @@ class TestLipsyncPipelineIntegration:
 # ===================================================================
 
 class TestLipsyncReaderBundle:
+
+    def test_cli_defaults_to_reader_format(self):
+        from screencastgen.cli import _build_parser
+
+        args = _build_parser().parse_args(
+            ["lipsync", "document.pdf", "--ref-video", "face.mp4"]
+        )
+        assert args.format == "reader"
+
+    def test_offline_archive_contains_local_viewer_and_assets(self, tmp_path):
+        from screencastgen.offline_reader import build_offline_reader_archive
+        from screencastgen.reader_assets import MANIFEST_NAME
+
+        pages = tmp_path / "pages"
+        pages.mkdir()
+        (tmp_path / "reader_audio.mp3").write_bytes(b"audio")
+        (tmp_path / "presenter.mp4").write_bytes(b"video")
+        (pages / "page-0001.jpg").write_bytes(b"image")
+        manifest = {
+            "version": 1,
+            "title": "Offline Test",
+            "language": "en",
+            "duration": 1.0,
+            "audio": "reader_audio.mp3",
+            "presenter": "presenter.mp4",
+            "pages": {
+                "dir": "pages",
+                "files": {"1": "page-0001.jpg"},
+            },
+            "chunks": [{
+                "chunk_num": 1,
+                "text": "hello",
+                "offset": 0,
+                "pages": [1],
+                "words": [{"word": "hello", "start": 0, "end": 1}],
+            }],
+        }
+        manifest_path = tmp_path / MANIFEST_NAME
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        output = tmp_path / "offline.zip"
+        build_offline_reader_archive(str(manifest_path), str(output))
+
+        with zipfile.ZipFile(output) as archive:
+            assert set(archive.namelist()) == {
+                "index.html",
+                MANIFEST_NAME,
+                "reader_audio.mp3",
+                "presenter.mp4",
+                "pages/page-0001.jpg",
+            }
+            html = archive.read("index.html").decode()
+        assert "Offline Test" in html
+        assert "fetch(" not in html
+        assert "presenter.mp4" in html
+
+    def test_lipsync_epub_omits_presenter_video(
+        self, sample_aligned_chunks, sample_pdf_simple, tmp_path
+    ):
+        from screencastgen.pipelines.lipsync import build_lipsync_epub
+
+        captured = []
+
+        class FakeBuilder:
+            def __init__(self, **kwargs):
+                pass
+
+            def add_chapter(self, chapter_num, aligned_chunks, lipsync_video_path=None):
+                captured.append(lipsync_video_path)
+
+            def build(self, output_path):
+                with open(output_path, "wb") as fh:
+                    fh.write(b"epub")
+
+        tracker = MagicMock()
+        tracker.is_epub_built.return_value = False
+        request = make_lipsync_args(
+            sample_pdf_simple,
+            tmp_path,
+            ref_audio=str(tmp_path / "voice.wav"),
+            ref_video=str(tmp_path / "face.mp4"),
+            format="epub",
+        )
+
+        with patch("screencastgen.epub_builder.EPUBBuilder", FakeBuilder):
+            result = build_lipsync_epub(
+                request,
+                sample_aligned_chunks,
+                [str(tmp_path / "clip.mp4")] * len(sample_aligned_chunks),
+                tracker,
+            )
+
+        assert result.exit_code == 0
+        assert captured and all(video is None for video in captured)
 
     def test_tracker_presenter_flag_persists(self, tmp_path):
         """Tracker should record presenter-built state for resumability."""

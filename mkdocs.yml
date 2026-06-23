@@ -1,0 +1,182 @@
+site_name: screencastgen
+site_description: Documentation for narrated document, highlighting, lip-sync, and visualization pipelines
+site_url: https://shashekhar.github.io/screencastgen/
+repo_url: https://github.com/ShaShekhar/screencastgen
+repo_name: ShaShekhar/screencastgen
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.path
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.action.edit
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - .
+      check_paths: true
+      restrict_base_path: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+validation:
+  links:
+    absolute_links: relative_to_docs
+    anchors: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+  - Guides:
+      - guides/index.md
+      - Narrated audio: guides/audio.md
+      - Synchronized highlighting: guides/highlight.md
+      - Lip-synced presenter: guides/lip-sync.md
+      - Educational visualization: guides/visualization.md
+      - Remote GPU: guides/remote-gpu.md
+      - Web application: guides/web-application.md
+  - Concepts:
+      - concepts/index.md
+      - Architecture: concepts/architecture.md
+      - Pipeline design: concepts/pipelines.md
+      - Provider model: concepts/providers.md
+      - Data flow: concepts/data-flow.md
+      - Web architecture: concepts/web-architecture.md
+  - Developer reference:
+      - reference/index.md
+      - Core:
+          - CLI: reference/core/cli.md
+          - Types: reference/core/types.md
+          - Constants: reference/core/constants.md
+          - Extractor: reference/core/extractor.md
+          - Text processing: reference/core/text-processing.md
+          - Tracker: reference/core/tracker.md
+          - Concatenator: reference/core/concatenator.md
+          - Aligner: reference/core/aligner.md
+          - Lip-sync facade: reference/core/lipsync-facade.md
+          - Highlight renderer: reference/core/highlight-renderer.md
+          - Page renderer: reference/core/page-renderer.md
+          - Word matcher: reference/core/word-matcher.md
+          - Video composer: reference/core/video-composer.md
+          - EPUB builder: reference/core/epub-builder.md
+          - Reader assets: reference/core/reader-assets.md
+          - Offline reader: reference/core/offline-reader.md
+          - Models: reference/core/models.md
+          - Doctor: reference/core/doctor.md
+          - Remote GPU client: reference/core/remote-gpu-client.md
+          - Inference server: reference/core/inference-server.md
+          - Inference batcher: reference/core/inference-batcher.md
+          - Transcription: reference/core/transcription.md
+          - WhisperX compatibility: reference/core/whisper-x-compat.md
+      - Pipelines:
+          - Audio: reference/pipelines/audio-pipeline.md
+          - Highlight: reference/pipelines/highlight-pipeline.md
+          - Lip-sync: reference/pipelines/lipsync-pipeline.md
+          - Visualization: reference/pipelines/visualization-pipeline.md
+          - Shared helpers: reference/pipelines/pipeline-common.md
+          - Events: reference/pipelines/pipeline-events.md
+          - Types: reference/pipelines/pipeline-types.md
+      - Providers:
+          - TTS registry: reference/providers/tts-registry.md
+          - TTS base: reference/providers/tts-base.md
+          - Qwen backend: reference/providers/qwen-backend.md
+          - Remote TTS: reference/providers/remote-tts.md
+          - Alignment registry: reference/providers/alignment-registry.md
+          - WhisperX provider: reference/providers/whisper-x-provider.md
+          - Lip-sync registry: reference/providers/lipsync-registry.md
+          - LatentSync provider: reference/providers/latent-sync-provider.md
+          - Visualization registry: reference/providers/visualization-registry.md
+          - ManimGL renderer: reference/providers/manim-gl-renderer.md
+          - ManimCE renderer: reference/providers/manim-ce-renderer.md
+      - Configuration:
+          - Setup script: reference/configuration/setup-script.md
+          - Package configuration: reference/configuration/pyproject-toml.md
+          - Docker Compose: reference/configuration/docker-compose.md
+          - Web Makefile: reference/configuration/web-makefile.md
+      - Web backend:
+          - FastAPI application: reference/web/backend/fast-api-app.md
+          - Configuration: reference/web/backend/web-config.md
+          - Database: reference/web/backend/web-database.md
+          - Database models: reference/web/backend/db-models.md
+          - Schemas: reference/web/backend/schemas.md
+          - Uploads router: reference/web/backend/uploads-router.md
+          - Jobs router: reference/web/backend/jobs-router.md
+          - Events router: reference/web/backend/events-router.md
+          - Reader router: reference/web/backend/reader-router.md
+          - Voices router: reference/web/backend/voices-router.md
+          - Storage service: reference/web/backend/storage-service.md
+          - Voices service: reference/web/backend/voices-service.md
+          - Transcription client: reference/web/backend/transcribe-client.md
+          - Celery application: reference/web/backend/celery-app.md
+          - Pipeline tasks: reference/web/backend/pipeline-tasks.md
+          - Progress reporter: reference/web/backend/progress-reporter.md
+          - Logging: reference/web/backend/web-logging.md
+      - Web frontend:
+          - Overview: reference/web/frontend/frontend-overview.md
+          - API client: reference/web/frontend/api-client.md
+          - Jobs API: reference/web/frontend/jobs-api.md
+          - Uploads API: reference/web/frontend/uploads-api.md
+          - Voices API: reference/web/frontend/voices-api.md
+          - Reader API: reference/web/frontend/reader-api.md
+          - Job progress hook: reference/web/frontend/use-job-progress-hook.md
+          - Dashboard page: reference/web/frontend/dashboard-page.md
+          - New job page: reference/web/frontend/new-job-page.md
+          - Job detail page: reference/web/frontend/job-detail-page.md
+          - Reader page: reference/web/frontend/reader-page.md
+          - Navbar: reference/web/frontend/navbar.md
+          - Pipeline selector: reference/web/frontend/pipeline-selector.md
+          - File uploader: reference/web/frontend/file-uploader.md
+          - Voice settings: reference/web/frontend/voice-settings.md
+          - Lip-sync settings: reference/web/frontend/lipsync-settings.md
+          - Lip-sync preview: reference/web/frontend/lipsync-preview-frame.md
+          - Lip-sync run panel: reference/web/frontend/lipsync-run-panel.md
+          - Video settings: reference/web/frontend/video-settings.md
+          - Progress bar: reference/web/frontend/progress-bar-component.md
+          - Job card: reference/web/frontend/job-card.md
+  - Troubleshooting: troubleshooting.md

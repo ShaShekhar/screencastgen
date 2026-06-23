@@ -121,9 +121,20 @@ def _resolve_highlight_voice(
         if ref_uuid:
             uploaded = db_session.get(UploadedFile, ref_uuid)
             if uploaded:
+                ref_audio_path = get_upload_abs_path(uploaded.stored_path)
+                ref_text = cfg.get("ref_text") or uploaded.ref_text
+                if not ref_text:
+                    ref_text = transcribe_upload(
+                        cfg.get("tts_server_url") or settings.TTS_SERVER_URL,
+                        ref_audio_path,
+                        language=cfg.get("language", DEFAULT_LANGUAGE),
+                    )
+                    if not ref_text:
+                        raise ValueError("Could not transcribe reference audio")
+                    uploaded.ref_text = ref_text
                 return (
-                    get_upload_abs_path(uploaded.stored_path),
-                    cfg.get("ref_text") or uploaded.ref_text,
+                    ref_audio_path,
+                    ref_text,
                 )
 
     return None, cfg.get("ref_text")
@@ -186,10 +197,11 @@ def _build_lipsync_request(
     elif fmt == "epub":
         output_filename = stem + "_lipsync.epub"
     else:
-        output_filename = "reader_manifest.json"
+        output_filename = stem + "_reader.zip"
 
     ref_audio_path = ""
     ref_text = cfg.get("ref_text")
+    ref_audio = None
     ref_video_path = ""
     if job.ref_audio_file_id:
         ref_audio = db_session.get(UploadedFile, job.ref_audio_file_id)
@@ -203,11 +215,17 @@ def _build_lipsync_request(
 
     if not ref_audio_path and ref_video_path:
         ref_audio_path = _extract_reference_audio_from_video(ref_video_path, output_dir)
-        ref_text = ref_text or transcribe_upload(
+
+    if ref_audio_path and not ref_text:
+        ref_text = transcribe_upload(
             cfg.get("tts_server_url") or settings.TTS_SERVER_URL,
             ref_audio_path,
             language=cfg.get("language", DEFAULT_LANGUAGE),
         )
+        if not ref_text:
+            raise ValueError("Could not transcribe reference audio")
+        if ref_audio:
+            ref_audio.ref_text = ref_text
 
     return LipsyncPipelineRequest(
         pdf=pdf_path,
@@ -463,5 +481,56 @@ def run_lipsync_export_task(self, job_id: str):
             _set_export(job, export_status="failed", export_error=str(exc))
 
         return {"export_status": (job.config_json or {}).get("export_status")}
+    finally:
+        db_session.close()
+
+
+@celery_app.task(bind=True, max_retries=0)
+def run_lipsync_epub_export_task(self, job_id: str):
+    """Build a narration-and-text EPUB from a completed lip-sync job."""
+    from ..database import get_sync_session
+
+    logger.info("Starting lip-sync EPUB export for job %s", job_id)
+    db_session = get_sync_session()
+
+    def _set_export(job: Job, **fields) -> None:
+        cfg = dict(job.config_json or {})
+        cfg.update(fields)
+        job.config_json = cfg
+        db_session.commit()
+
+    try:
+        job = db_session.get(Job, uuid.UUID(job_id))
+        if not job or job.pipeline_type.value != "lipsync":
+            return {"error": "Not a lip-sync job"}
+        if job.status != JobStatus.completed:
+            return {"error": "Job is not completed"}
+
+        _set_export(job, epub_export_status="running", epub_export_error=None)
+        try:
+            uploaded_file = db_session.get(UploadedFile, job.uploaded_file_id)
+            if not uploaded_file:
+                raise ValueError("Uploaded file record not found")
+            pdf_path = get_upload_abs_path(uploaded_file.stored_path)
+            output_dir = get_output_dir(uuid.UUID(job_id))
+            request = _build_lipsync_request(job, pdf_path, output_dir, db_session, fmt="epub")
+            result = run_lipsync_pipeline(request)
+            if result.exit_code == 0 and result.output_path and os.path.isfile(result.output_path):
+                upload_output(uuid.UUID(job_id), result.output_name)
+                _set_export(
+                    job,
+                    epub_export_status="done",
+                    epub_export_output=result.output_name,
+                    epub_export_error=None,
+                )
+                logger.info("Lip-sync EPUB export complete for job %s -> %s", job_id, result.output_name)
+            else:
+                detail = result.error_message or f"Pipeline returned exit code {result.exit_code}"
+                _set_export(job, epub_export_status="failed", epub_export_error=detail)
+        except Exception as exc:
+            logger.exception("Lip-sync EPUB export crashed for job %s", job_id)
+            _set_export(job, epub_export_status="failed", epub_export_error=str(exc))
+
+        return {"export_status": (job.config_json or {}).get("epub_export_status")}
     finally:
         db_session.close()

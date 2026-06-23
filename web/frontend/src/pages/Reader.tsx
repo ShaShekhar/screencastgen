@@ -16,12 +16,20 @@ import {
   getReaderPresenterUrl,
 } from "../api/reader";
 import {
+  getEpubExportDownloadUrl,
+  getEpubExportStatus,
   getDownloadUrl,
   getMp4ExportDownloadUrl,
   getMp4ExportStatus,
+  requestEpubExport,
   requestMp4Export,
 } from "../api/jobs";
-import { Mp4ExportStatus, ReaderChunk, ReaderManifest } from "../types";
+import {
+  EpubExportStatus,
+  Mp4ExportStatus,
+  ReaderChunk,
+  ReaderManifest,
+} from "../types";
 
 interface FlatWord {
   word: string;
@@ -152,6 +160,8 @@ export default function Reader() {
   const [pipVisible, setPipVisible] = useState(true);
   const [exportStatus, setExportStatus] = useState<Mp4ExportStatus>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [epubStatus, setEpubStatus] = useState<EpubExportStatus>(null);
+  const [epubError, setEpubError] = useState<string | null>(null);
   const [pipPos, setPipPos] = useState<{ x: number; y: number }>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(PIP_POS_KEY) || "");
@@ -267,6 +277,45 @@ export default function Reader() {
     } catch {
       setExportStatus("failed");
       setExportError("Could not start the MP4 export.");
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (!id || !hasPresenter) return;
+    if (epubStatus === "done" || epubStatus === "failed") return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = () => {
+      getEpubExportStatus(id)
+        .then((state) => {
+          if (cancelled) return;
+          setEpubStatus(state.export_status);
+          setEpubError(state.export_error);
+          if (state.export_status === "running") {
+            timer = setTimeout(poll, 3000);
+          }
+        })
+        .catch(() => undefined);
+    };
+    poll();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [id, hasPresenter, epubStatus]);
+
+  const handleEpubExport = useCallback(async () => {
+    if (!id) return;
+    setEpubError(null);
+    setEpubStatus("running");
+    try {
+      const state = await requestEpubExport(id);
+      setEpubStatus(state.export_status ?? "running");
+    } catch {
+      setEpubStatus("failed");
+      setEpubError("Could not start the EPUB export.");
     }
   }, [id]);
 
@@ -618,6 +667,13 @@ export default function Reader() {
           )}
           {id && hasPresenter && (
             <>
+              <a
+                href={getDownloadUrl(id)}
+                className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] transition"
+                title="Standalone reader for offline use"
+              >
+                ↓ Offline reader
+              </a>
               {exportStatus === "done" ? (
                 <a
                   href={getMp4ExportDownloadUrl(id)}
@@ -643,6 +699,34 @@ export default function Reader() {
                   {exportStatus === "failed"
                     ? "Retry MP4 export"
                     : "Export composited MP4"}
+                </button>
+              )}
+              {epubStatus === "done" ? (
+                <a
+                  href={getEpubExportDownloadUrl(id)}
+                  title="Text and narration only; reader compatibility varies"
+                  className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] transition"
+                >
+                  ↓ Read-along EPUB
+                </a>
+              ) : epubStatus === "running" ? (
+                <span className="text-xs text-[var(--reader-muted)] px-1">
+                  Building EPUB…
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleEpubExport}
+                  title={
+                    epubStatus === "failed"
+                      ? epubError || "The EPUB export failed — click to retry."
+                      : "Text and narration only; reader compatibility varies"
+                  }
+                  className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] transition"
+                >
+                  {epubStatus === "failed"
+                    ? "Retry EPUB export"
+                    : "Export read-along EPUB"}
                 </button>
               )}
             </>

@@ -248,3 +248,64 @@ async def export_lipsync_mp4_download(job_id: UUID):
             raise HTTPException(400, str(exc)) from exc
         except FileNotFoundError:
             raise HTTPException(404, "Exported file not found")
+
+
+@router.post("/jobs/{job_id}/export-epub")
+async def export_lipsync_epub(job_id: UUID):
+    """Trigger an on-demand narration-and-text EPUB export."""
+    async with async_session_factory() as session:
+        job = await session.get(Job, job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        if job.pipeline_type != PipelineType.lipsync:
+            raise HTTPException(400, "EPUB export is only available for lip-sync jobs")
+        if job.status != JobStatus.completed:
+            raise HTTPException(400, "Job output not available")
+
+        cfg = dict(job.config_json or {})
+        if cfg.get("epub_export_status") == "running":
+            return {"export_status": "running"}
+
+        cfg["epub_export_status"] = "running"
+        cfg.pop("epub_export_error", None)
+        cfg.pop("epub_export_output", None)
+        job.config_json = cfg
+        await session.commit()
+
+        from ..tasks.pipelines import run_lipsync_epub_export_task
+
+        run_lipsync_epub_export_task.delay(str(job_id))
+        return {"export_status": "running"}
+
+
+@router.get("/jobs/{job_id}/export-epub/status")
+async def export_lipsync_epub_status(job_id: UUID):
+    async with async_session_factory() as session:
+        job = await session.get(Job, job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        cfg = job.config_json or {}
+        return {
+            "export_status": cfg.get("epub_export_status"),
+            "export_output": cfg.get("epub_export_output"),
+            "export_error": cfg.get("epub_export_error"),
+        }
+
+
+@router.get("/jobs/{job_id}/export-epub/download")
+async def export_lipsync_epub_download(job_id: UUID):
+    async with async_session_factory() as session:
+        job = await session.get(Job, job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        cfg = job.config_json or {}
+        output = cfg.get("epub_export_output")
+        if cfg.get("epub_export_status") != "done" or not output:
+            raise HTTPException(400, "Exported EPUB not available")
+
+        try:
+            return get_download_response(job_id, output)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except FileNotFoundError:
+            raise HTTPException(404, "Exported file not found")

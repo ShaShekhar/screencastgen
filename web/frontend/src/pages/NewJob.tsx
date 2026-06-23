@@ -58,7 +58,7 @@ const VISUALIZATION_RESOLUTIONS = [
 
 export default function NewJob() {
   const navigate = useNavigate();
-  const [pipeline, setPipeline] = useState<PipelineType>("highlight");
+  const [pipeline, setPipeline] = useState<PipelineType>("lipsync");
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [highlightConfig, setHighlightConfig] =
     useState<HighlightConfig>(DEFAULT_HIGHLIGHT);

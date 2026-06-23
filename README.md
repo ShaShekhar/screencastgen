@@ -1,8 +1,24 @@
-# screencastgen: Audio-Synchronized Document Readers with Text Highlighting and Lip-Sync Video
+# screencastgen
 
-Convert text documents (PDF, EPUB, plain text, and more) to audio files, highlighted-text videos, or lip-synced talking-head videos.
+Audio-synchronized document readers with text highlighting and lip-sync video.
+Convert PDF, EPUB, plain-text, and other documents into narrated audio,
+highlighted readers, or lip-synced talking-head presentations.
 
 Supports pluggable TTS backends, alignment providers, and lip-sync providers. The supported implementations are Qwen for TTS, WhisperX for alignment, and LatentSync for lip-sync.
+
+## Documentation
+
+Read the [documentation site](https://shashekhar.github.io/screencastgen/) for
+guided workflows, architecture, troubleshooting, and the developer reference.
+The Markdown source is maintained in [`docs/`](docs/).
+
+Preview documentation changes locally with:
+
+```bash
+pip install -e ".[docs]"
+mkdocs serve
+mkdocs build --strict
+```
 
 ## Quick Start
 
@@ -20,13 +36,22 @@ manual installation.
 
 ### Lip-sync (`screencastgen lipsync`)
 
-Generate a talking-head video with voice cloning, synchronized lip movement,
-and highlighted source content. PDF inputs use the original page images and
-matched word positions; other document formats use the plain-text renderer.
+Generate a talking-head reader with voice cloning, synchronized lip movement,
+and highlighted source content. The default output is a standalone reader ZIP:
+extract it and open `index.html` locally. PDF inputs use the original page
+images and matched word positions; other document formats use reflowed text.
 
 ```bash
 screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4
+screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4 --format mp4
+screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4 --format epub
 ```
+
+The MP4 option bakes the document and presenter into one video. EPUB is a
+secondary text-and-narration accessibility export: it intentionally omits the
+presenter, and Media Overlay support varies between EPUB reading applications.
+The offline reader ZIP is the portable format that preserves the complete
+talking-head experience.
 
 See [LatentSync Sidecar](INSTALLATION.md#latentsync-sidecar) for local setup.
 
@@ -64,8 +89,10 @@ independently selectable provider layers.
 Remote deployments can offload TTS, alignment, and lip-sync inference to a GPU
 host while document processing and media composition remain on the client. See
 [Remote GPU Setup](INSTALLATION.md#remote-gpu-setup) for deployment commands,
-[Inference Server](docs/Core/Inference%20Server.md) for the server API, and
-[Remote GPU Client](docs/Core/Remote%20GPU%20Client.md) for client behavior.
+[Inference Server](https://shashekhar.github.io/screencastgen/reference/core/inference-server/)
+for the server API, and
+[Remote GPU Client](https://shashekhar.github.io/screencastgen/reference/core/remote-gpu-client/)
+for client behavior.
 
 ## Model Dependencies and References
 
@@ -179,6 +206,12 @@ with its completed and total page counts.
 The lip-sync setup screen also includes a reader-style preview. It uses the saved
 reader theme and lets the presenter picture-in-picture be dragged within the
 preview; the configured face position remains its initial placement.
+
+New web jobs default to the **Talking-Head Reader** pipeline. Its primary
+download is the standalone offline-reader ZIP; the reader header can also build
+a baked MP4 or a text-and-narration EPUB on demand. Reference-audio uploads no
+longer block on transcription: the worker transcribes the clip only when a job
+actually consumes it and caches the result for retries and later exports.
 
 ## Future Directions
 
