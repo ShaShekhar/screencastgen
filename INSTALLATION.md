@@ -20,6 +20,52 @@ with an NVIDIA GPU and a working driver.
 | Native Windows | Yes | Yes | No; use WSL2 |
 | macOS | Yes | Yes | No CUDA support |
 
+## System Prerequisites
+
+Install system tools before running the managed setup. The setup program checks
+for these commands and reports anything missing, but it does not install system
+packages or request administrator privileges.
+
+On Debian or Ubuntu VMs:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates git nodejs npm ffmpeg build-essential
+curl -LsSf https://astral.sh/uv/install.sh | sh
+exec "$SHELL"
+
+# From the cloned screencastgen directory:
+python3 scripts/setup.py --check
+python3 scripts/setup.py
+```
+
+`build-essential` provides `gcc`, `g++`, and `make`. The `ffmpeg` package
+provides both `ffmpeg` and `ffprobe`. `nodejs` and `npm` are required for the
+React frontend build, and `uv` creates the Python environment used by setup.
+
+For a local GPU install, the VM also needs an NVIDIA driver that makes
+`nvidia-smi` work before setup runs. Install the driver using your cloud image,
+distribution, or NVIDIA instructions; the repository installer does not manage
+GPU drivers.
+
+Other common platforms:
+
+```bash
+# Fedora/RHEL
+sudo dnf install git nodejs npm ffmpeg gcc-c++ make
+curl -LsSf https://astral.sh/uv/install.sh | sh
+exec "$SHELL"
+
+# macOS with Homebrew
+brew install git uv node ffmpeg
+
+# Windows PowerShell
+winget install --id Git.Git -e
+winget install --id astral-sh.uv -e
+winget install --id OpenJS.NodeJS.LTS -e
+winget install --id Gyan.FFmpeg -e
+```
+
 ## Managed Setup
 
 Linux or macOS:

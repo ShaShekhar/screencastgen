@@ -104,6 +104,47 @@ def test_setup_check_does_not_install():
     install.assert_not_called()
 
 
+def test_setup_preflight_prints_debian_prerequisite_commands(capsys):
+    setup = _load_setup_module()
+    with patch.object(setup.platform, "system", return_value="Linux"), patch.object(
+        setup.shutil, "which", return_value=None
+    ), patch.object(setup.Path, "read_text", return_value="ID=ubuntu"):
+        assert setup.preflight("dev") is False
+
+    output = capsys.readouterr().out
+    assert "sudo apt-get update" in output
+    assert (
+        "sudo apt-get install -y curl ca-certificates git nodejs npm ffmpeg "
+        "build-essential"
+    ) in output
+    assert "curl -LsSf https://astral.sh/uv/install.sh | sh" in output
+    assert (
+        "uv installation: https://docs.astral.sh/uv/getting-started/installation/"
+        in output
+    )
+
+
+def test_setup_preflight_local_gpu_hint_mentions_build_essential(capsys):
+    setup = _load_setup_module()
+    available = {
+        "git": "/bin/git",
+        "uv": "/bin/uv",
+        "node": "/bin/node",
+        "npm": "/bin/npm",
+        "ffmpeg": "/bin/ffmpeg",
+        "ffprobe": "/bin/ffprobe",
+        "bash": "/bin/bash",
+    }
+    with patch.object(setup.platform, "system", return_value="Linux"), patch.object(
+        setup.shutil, "which", side_effect=lambda name: available.get(name)
+    ), patch.object(setup.Path, "read_text", return_value="ID=ubuntu"):
+        assert setup.preflight("local-gpu") is False
+
+    output = capsys.readouterr().out
+    assert "missing required commands: gcc, g++, make, nvidia-smi" in output
+    assert "build-essential provides gcc, g++, and make" in output
+
+
 def test_native_windows_rejects_local_gpu_profile():
     setup = _load_setup_module()
     commands = (

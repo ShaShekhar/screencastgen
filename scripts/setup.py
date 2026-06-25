@@ -54,14 +54,19 @@ def install_hint(missing: list[str]) -> str:
                 "nvidia-smi",
             }:
                 packages.append(package)
+        if "uv" in missing and "uv" not in packages:
+            packages.append("uv")
         return (
-            "Install missing tools with Homebrew where available: "
-            f"brew install {' '.join(packages)}"
+            "Install missing tools with Homebrew where available:\n"
+            f"  brew install {' '.join(packages)}"
         )
     if system == "Windows":
         return (
-            "Install the missing tools with winget or their official installers "
-            "(Git.Git, OpenJS.NodeJS.LTS, and Gyan.FFmpeg), then open a new terminal."
+            "Install the missing tools with winget, then open a new terminal:\n"
+            "  winget install --id Git.Git -e\n"
+            "  winget install --id astral-sh.uv -e\n"
+            "  winget install --id OpenJS.NodeJS.LTS -e\n"
+            "  winget install --id Gyan.FFmpeg -e"
         )
     distro = ""
     try:
@@ -69,14 +74,23 @@ def install_hint(missing: list[str]) -> str:
     except OSError:
         pass
     if "fedora" in distro or "rhel" in distro:
-        return (
-            "Install the corresponding packages with dnf (git, nodejs, npm, ffmpeg, "
-            "gcc-c++, and make as required)."
+        return "\n".join(
+            [
+                "Install the missing tools with dnf:",
+                "  sudo dnf install git nodejs npm ffmpeg gcc-c++ make",
+                "  curl -LsSf https://astral.sh/uv/install.sh | sh",
+                "  exec \"$SHELL\"",
+                "Install the NVIDIA driver separately when nvidia-smi is missing.",
+            ]
         )
     return (
-        "Install the corresponding packages with your distribution package manager. "
-        "On Debian/Ubuntu the package names are git, nodejs, npm, ffmpeg, and "
-        "build-essential. Install the NVIDIA driver separately when required."
+        "Install the missing tools on Debian/Ubuntu with:\n"
+        "  sudo apt-get update\n"
+        "  sudo apt-get install -y curl ca-certificates git nodejs npm ffmpeg build-essential\n"
+        "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
+        "  exec \"$SHELL\"\n"
+        "build-essential provides gcc, g++, and make. Install the NVIDIA driver "
+        "separately when nvidia-smi is missing."
     )
 
 
