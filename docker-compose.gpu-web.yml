@@ -1,0 +1,123 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: screencastgen
+      POSTGRES_PASSWORD: screencastgen
+      POSTGRES_DB: screencastgen
+    volumes:
+      - screencastgen-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U screencastgen"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  gpu-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    image: screencastgen:gpu
+    command:
+      - screencastgen-server
+      - --backend
+      - qwen
+      - --device
+      - cuda
+      - --aligner
+      - whisperx
+      - --lipsync-provider
+      - latentsync
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8100"
+    ports:
+      - "${GPU_PORT:-8100}:8100"
+    gpus: all
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      TORCH_HOME: /root/.cache/torch
+      LATENTSYNC_ROOT: /opt/latentsync
+      LATENTSYNC_PYTHON: /opt/latentsync-env/bin/python
+    volumes:
+      - screencastgen-hf:/root/.cache/huggingface
+      - screencastgen-torch:/root/.cache/torch
+      - screencastgen-latentsync:/opt/latentsync/checkpoints
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  backend:
+    build:
+      context: .
+      dockerfile: web/Dockerfile.backend
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      P2A_DATABASE_URL: postgresql+asyncpg://screencastgen:screencastgen@postgres:5432/screencastgen
+      P2A_SYNC_DATABASE_URL: postgresql+psycopg2://screencastgen:screencastgen@postgres:5432/screencastgen
+      P2A_REDIS_URL: redis://redis:6379/0
+      P2A_UPLOAD_DIR: /data/uploads
+      P2A_OUTPUT_DIR: /data/outputs
+      P2A_TTS_SERVER_URL: http://gpu-server:8100
+      P2A_ALLOWED_ORIGINS: ${P2A_ALLOWED_ORIGINS:-["http://localhost:5173"]}
+    volumes:
+      - screencastgen-appdata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: web/Dockerfile.backend
+    command: celery -A web.backend.tasks.celery_app:celery_app worker --loglevel=info --concurrency=1
+    environment:
+      P2A_DATABASE_URL: postgresql+asyncpg://screencastgen:screencastgen@postgres:5432/screencastgen
+      P2A_SYNC_DATABASE_URL: postgresql+psycopg2://screencastgen:screencastgen@postgres:5432/screencastgen
+      P2A_REDIS_URL: redis://redis:6379/0
+      P2A_UPLOAD_DIR: /data/uploads
+      P2A_OUTPUT_DIR: /data/outputs
+      P2A_TTS_SERVER_URL: http://gpu-server:8100
+    volumes:
+      - screencastgen-appdata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      gpu-server:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: web/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    depends_on:
+      - backend
+
+volumes:
+  screencastgen-hf:
+    name: screencastgen-hf
+  screencastgen-torch:
+    name: screencastgen-torch
+  screencastgen-latentsync:
+    name: screencastgen-latentsync
+  screencastgen-pgdata:
+  screencastgen-appdata:

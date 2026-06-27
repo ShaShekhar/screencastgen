@@ -7,10 +7,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libpq-dev gcc && \
     rm -rf /var/lib/apt/lists/*
 
-# Install screencastgen package
+# Install screencastgen package with the remote-client and web dependencies
 COPY pyproject.toml requirements.txt ./
 COPY screencastgen/ screencastgen/
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e ".[client,web]"
 
 # Install web backend deps
 COPY web/backend/requirements.txt web/backend/requirements.txt

@@ -33,5 +33,8 @@ services:
 
 volumes:
   screencastgen-hf:
+    name: screencastgen-hf
   screencastgen-torch:
+    name: screencastgen-torch
   screencastgen-latentsync:
+    name: screencastgen-latentsync

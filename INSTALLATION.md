@@ -1,390 +1,290 @@
 # Installation Guide
 
-This guide covers the managed installer, supported platforms, manual dependency
-selection, model weights, local and remote GPU setup, and the web application.
+This guide is intentionally focused on Ubuntu GPU VMs. Docker is the recommended
+installation path for production-style use because it keeps CUDA, Python,
+LatentSync, the API, the worker, and the frontend isolated from the host.
 
-## Platform Support
+Source installation is still supported for development or for operators who want
+to manage the Python environment directly.
 
-All platforms need Git, [uv](https://docs.astral.sh/uv/getting-started/installation/),
-Node.js 18 or newer, npm, and FFmpeg (`ffmpeg` and `ffprobe` on `PATH`). The
-setup program checks these tools and prints platform-specific guidance; it never
-installs system packages or requests administrator privileges.
+## 1. Verify VM Prerequisites
 
-Local Qwen, WhisperX, and LatentSync execution additionally needs Linux or WSL2
-with an NVIDIA GPU and a working driver.
+Start with an Ubuntu VM that has an NVIDIA GPU and Docker installed.
 
-| Platform | Development and web UI | Remote GPU client | Full local GPU stack |
-|----------|------------------------|-------------------|----------------------|
-| Linux + NVIDIA | Yes | Yes | Yes |
-| Windows + WSL2/NVIDIA | Yes | Yes | Yes, inside WSL2 |
-| Native Windows | Yes | Yes | No; use WSL2 |
-| macOS | Yes | Yes | No CUDA support |
+Check the host GPU driver:
 
-## System Prerequisites
+```bash
+nvidia-smi
+```
 
-Install system tools before running the managed setup. The setup program checks
-for these commands and reports anything missing, but it does not install system
-packages or request administrator privileges.
+Check Docker and Compose:
 
-On Debian or Ubuntu VMs:
+```bash
+docker --version
+docker compose version
+```
+
+Check Docker GPU passthrough:
+
+```bash
+sudo docker run --rm --gpus all nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04 nvidia-smi
+```
+
+If this works, continue. On many GCP GPU VMs the NVIDIA container runtime may
+already be configured.
+
+If this fails, debug the VM's NVIDIA Docker runtime before installing
+screencastgen. Follow your cloud image documentation and the official NVIDIA
+Container Toolkit guide:
+
+https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+
+## 2. Docker Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/ShaShekhar/screencastgen.git
+cd screencastgen
+```
+
+Build the GPU image:
+
+```bash
+sudo docker build -f Dockerfile.gpu -t screencastgen:gpu .
+```
+
+Confirm the image exists and can see the GPU:
+
+```bash
+sudo docker images screencastgen:gpu
+sudo docker run --rm --gpus all screencastgen:gpu nvidia-smi
+```
+
+Download model weights into persistent Docker volumes:
+
+```bash
+sudo docker run --rm --gpus all \
+  -v screencastgen-hf:/root/.cache/huggingface \
+  -v screencastgen-torch:/root/.cache/torch \
+  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
+  screencastgen:gpu \
+  screencastgen download-models --backend qwen --package whisperx --package latentsync
+```
+
+### GPU Server Only
+
+Use this mode when another machine or application will call the GPU inference
+API.
+
+```bash
+sudo docker compose -f docker-compose.gpu.yml up
+```
+
+Check the server from another terminal:
+
+```bash
+curl http://localhost:8100/health
+```
+
+### Full Web UI Stack
+
+Use this mode to run everything on the VM: PostgreSQL, Redis, GPU inference
+server, FastAPI backend, Celery worker, and React frontend.
+
+Choose the public web port before starting the stack. This example serves the UI
+on port `8080`:
+
+```bash
+export WEB_PORT=8080
+export API_PORT=8000
+export GPU_PORT=8100
+sudo docker compose -f docker-compose.gpu-web.yml up --build
+```
+
+Open the UI from your machine:
+
+```text
+http://YOUR_VM_IP:8080
+```
+
+The browser talks to the frontend container on `WEB_PORT`. The frontend nginx
+container proxies `/api` to the backend container, so you normally only need to
+open `WEB_PORT` in your VM or cloud firewall.
+
+Optional direct checks from the VM:
+
+```bash
+curl http://localhost:8000/api/health
+curl http://localhost:8100/health
+```
+
+### Docker Doctor Output
+
+The GPU image intentionally does not include Node.js, npm, or frontend
+dependencies. These failures are expected if you run `screencastgen doctor
+--profile local-gpu` inside `screencastgen:gpu`:
+
+```text
+[FAIL] node: not found in PATH
+[FAIL] npm: not found in PATH
+[FAIL] frontend dependencies: not installed; run npm install in web/frontend
+```
+
+They do not block the GPU server or the web UI. The frontend is built by the
+separate `web/frontend` Docker image in the full web stack.
+
+### Docker Operations
+
+Stop the full web stack:
+
+```bash
+sudo docker compose -f docker-compose.gpu-web.yml down
+```
+
+Follow all logs:
+
+```bash
+sudo docker compose -f docker-compose.gpu-web.yml logs -f
+```
+
+Follow one service:
+
+```bash
+sudo docker compose -f docker-compose.gpu-web.yml logs -f worker
+sudo docker compose -f docker-compose.gpu-web.yml logs -f gpu-server
+```
+
+Rebuild only the web images after code changes:
+
+```bash
+sudo docker compose -f docker-compose.gpu-web.yml build backend worker frontend
+sudo docker compose -f docker-compose.gpu-web.yml up
+```
+
+## 3. Source Installation On Ubuntu
+
+Use this path when you want to run the project directly on the VM instead of
+inside Docker.
+
+Install host dependencies:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y curl ca-certificates git ffmpeg build-essential python3.10-dev
+sudo apt-get install -y \
+  curl ca-certificates git ffmpeg build-essential python3.10-dev \
+  postgresql postgresql-contrib redis-server
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
 curl -LsSf https://astral.sh/uv/install.sh | sh
 exec "$SHELL"
-
-# From the cloned screencastgen directory:
-python3 scripts/setup.py --check
-python3 scripts/setup.py
 ```
 
-`build-essential` provides `gcc`, `g++`, and `make`. `python3.10-dev` provides
-`Python.h`, which is needed when native Python extensions such as `insightface`
-compile during local GPU setup. The `ffmpeg` package provides both `ffmpeg` and
-`ffprobe`. The NodeSource commands install the current Node.js LTS release,
-including `npm`, for the React frontend build. `uv` creates the Python
-environment used by setup.
-
-For a local GPU install, the VM also needs an NVIDIA driver that makes
-`nvidia-smi` work before setup runs. Install the driver using your cloud image,
-distribution, or NVIDIA instructions; the repository installer does not manage
-GPU drivers.
-
-Other common platforms:
-
-```bash
-# Fedora/RHEL
-sudo dnf install git ffmpeg gcc-c++ make python3-devel
-curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -
-sudo dnf install nodejs
-curl -LsSf https://astral.sh/uv/install.sh | sh
-exec "$SHELL"
-
-# macOS with Homebrew
-brew install git uv node ffmpeg
-
-# Windows PowerShell
-winget install --id Git.Git -e
-winget install --id astral-sh.uv -e
-winget install --id OpenJS.NodeJS.LTS -e
-winget install --id Gyan.FFmpeg -e
-```
-
-## Managed Setup
-
-Linux or macOS:
+Clone and install:
 
 ```bash
 git clone https://github.com/ShaShekhar/screencastgen.git
 cd screencastgen
-python3 scripts/setup.py
-source .venv/bin/activate
-```
-
-Windows PowerShell:
-
-```powershell
-git clone https://github.com/ShaShekhar/screencastgen.git
-cd screencastgen
-py scripts/setup.py
-.venv\Scripts\Activate.ps1
-```
-
-The automatic profile installs the full local stack and downloads model weights
-when it detects Linux/WSL2 with NVIDIA. Native Windows, macOS, and non-GPU Linux
-receive the development and remote-client stack without CUDA models.
-
-Inspect prerequisites without changing anything, or select a profile explicitly:
-
-```bash
 python3 scripts/setup.py --check
 python3 scripts/setup.py --profile local-gpu
-python3 scripts/setup.py --profile local-gpu --model 1.7B
-python3 scripts/setup.py --profile remote-client --server-url http://gpu-vm:8100
-python3 scripts/setup.py --profile dev
-```
-
-Setup creates a Python 3.10 environment, installs the selected Python and
-frontend dependencies, verifies a frontend build, and runs the environment
-doctor. The `local-gpu` profile also creates the isolated LatentSync environment
-and downloads Qwen 0.6B, WhisperX, and LatentSync weights. Downloads are cached,
-so rerunning setup is safe.
-
-Verify an installation at any time:
-
-```bash
-screencastgen doctor --profile auto
-screencastgen doctor --profile local-gpu --model 1.7B
-screencastgen doctor --profile remote-client --server-url http://gpu-vm:8100
-```
-
-## Manual Installation
-
-Use manual extras when you do not want the managed setup profiles:
-
-```bash
-pip install -e .                    # Core document/audio orchestration
-pip install -e ".[client]"         # Remote client and video composition
-pip install -e ".[qwen]"           # Local Qwen3-TTS
-pip install -e ".[highlight]"       # Local WhisperX highlighting
-pip install -e ".[lipsync]"         # Local lip-sync pipeline dependencies
-pip install -e ".[server]"          # GPU inference server
-pip install -e ".[web]"             # Web backend and worker
-pip install -e ".[dev]"             # Tests and development helpers
-pip install -e ".[all]"             # Supported local stack
-```
-
-Optional cloud integrations:
-
-```bash
-pip install -e ".[gcs]"             # Google Cloud Storage
-pip install -e ".[s3]"              # Amazon S3
-```
-
-## Model Weights
-
-The default Qwen 0.6B model typically needs 4–6 GB of VRAM. The larger 1.7B
-model typically needs 6–8 GB. The bundled LatentSync 1.6 integration has a
-higher requirement: upstream lists 18 GB as the minimum VRAM for inference.
-
-```bash
-screencastgen download-models --backend qwen
-screencastgen download-models --backend qwen --model 1.7B
-screencastgen download-models --package whisperx
-screencastgen download-models --package latentsync
-```
-
-LatentSync must be installed before downloading its weights. Requested downloads
-return a nonzero exit code if any model cannot be prepared.
-
-## LatentSync Sidecar
-
-LatentSync uses a separate Python 3.10 environment so its pinned Torch stack does
-not conflict with WhisperX. This local path is supported on Linux and WSL2.
-
-```bash
-scripts/install_latentsync.sh
-```
-
-To install the LatentSync code and Python dependencies without downloading model
-weights, such as when building a Docker image that will mount checkpoints at
-runtime:
-
-```bash
-scripts/install_latentsync.sh --skip-checkpoints
-```
-
-Default locations:
-
-- `external/LatentSync` for the upstream repository
-- `.venvs/latentsync` for its environment
-
-Custom locations can be configured before running the pipeline:
-
-```bash
-export LATENTSYNC_ROOT=/path/to/LatentSync
-export LATENTSYNC_PYTHON=/path/to/.venvs/latentsync/bin/python
-```
-
-The provider runs LatentSync through a persistent sidecar subprocess and does
-not import it into the main screencastgen environment.
-
-## Remote GPU Setup
-
-The GPU host runs TTS, alignment, and lip-sync. The client handles document
-extraction, orchestration, and final media composition.
-
-GPU host:
-
-```bash
-python3 scripts/setup.py --profile local-gpu
 source .venv/bin/activate
+```
+
+The `local-gpu` setup creates the main Python environment, installs frontend
+dependencies, installs LatentSync into a sidecar environment, downloads the
+default Qwen, WhisperX, and LatentSync model weights, runs doctor, and verifies
+the frontend build.
+
+Set up local PostgreSQL and Redis for the web app:
+
+```bash
+sudo systemctl enable --now postgresql redis-server
+sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='screencastgen'" | grep -q 1 \
+  || sudo -u postgres psql -c "CREATE USER screencastgen WITH PASSWORD 'screencastgen';"
+sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='screencastgen'" | grep -q 1 \
+  || sudo -u postgres createdb -O screencastgen screencastgen
+```
+
+Create the web app environment file:
+
+```bash
+cat > web/.env <<'EOF'
+P2A_DATABASE_URL=postgresql+asyncpg://screencastgen:screencastgen@localhost:5432/screencastgen
+P2A_SYNC_DATABASE_URL=postgresql+psycopg2://screencastgen:screencastgen@localhost:5432/screencastgen
+P2A_REDIS_URL=redis://localhost:6379/0
+P2A_TTS_SERVER_URL=http://localhost:8100
+P2A_UPLOAD_DIR=./uploads
+P2A_OUTPUT_DIR=./outputs
+P2A_ALLOWED_ORIGINS=["http://localhost:5173"]
+EOF
+
+mkdir -p web/uploads web/outputs
+```
+
+Start the GPU inference server in one terminal:
+
+```bash
 screencastgen-server --backend qwen --device cuda \
   --aligner whisperx --lipsync-provider latentsync
 ```
 
-Client:
-
-```bash
-python3 scripts/setup.py --profile remote-client --server-url http://gpu-vm:8100
-source .venv/bin/activate
-screencastgen audio MyBook.pdf --backend remote --tts-server-url http://gpu-vm:8100
-screencastgen highlight MyBook.pdf --backend remote --tts-server-url http://gpu-vm:8100
-```
-
-On Windows PowerShell, use `py scripts/setup.py` and
-`.venv\Scripts\Activate.ps1` instead.
-
-## GPU Docker VM Setup
-
-Use the root GPU Docker image on an NVIDIA VM with Docker and NVIDIA Container
-Toolkit installed. Model weights are stored in Docker volumes, not baked into
-the image layers.
-
-Build the image on the VM:
-
-```bash
-docker build -f Dockerfile.gpu -t screencastgen:gpu .
-```
-
-Confirm GPU passthrough from the VM container runtime:
-
-```bash
-docker run --rm --gpus all screencastgen:gpu nvidia-smi
-```
-
-Preload Qwen, WhisperX, and LatentSync weights into persistent named volumes:
-
-```bash
-docker run --rm --gpus all \
-  -v screencastgen-hf:/root/.cache/huggingface \
-  -v screencastgen-torch:/root/.cache/torch \
-  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
-  screencastgen:gpu \
-  screencastgen download-models --backend qwen --package whisperx --package latentsync
-```
-
-Run a lip-sync job from the repository workspace mounted into the container:
-
-```bash
-docker run --rm --gpus all \
-  -v "$PWD:/workspace" \
-  -v screencastgen-hf:/root/.cache/huggingface \
-  -v screencastgen-torch:/root/.cache/torch \
-  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
-  -w /workspace \
-  screencastgen:gpu \
-  screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4 --device cuda
-```
-
-Start the GPU inference server with Docker Compose:
-
-```bash
-docker compose -f docker-compose.gpu.yml up --build
-```
-
-Recommended VM verification sequence:
-
-```bash
-docker build -f Dockerfile.gpu -t screencastgen:gpu .
-docker run --rm --gpus all screencastgen:gpu nvidia-smi
-docker run --rm --gpus all \
-  -v screencastgen-hf:/root/.cache/huggingface \
-  -v screencastgen-torch:/root/.cache/torch \
-  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
-  screencastgen:gpu \
-  screencastgen download-models --backend qwen --package whisperx --package latentsync
-docker run --rm --gpus all \
-  -v screencastgen-hf:/root/.cache/huggingface \
-  -v screencastgen-torch:/root/.cache/torch \
-  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
-  screencastgen:gpu \
-  screencastgen doctor --profile local-gpu
-docker run --rm --gpus all \
-  -v "$PWD:/workspace" \
-  -v screencastgen-hf:/root/.cache/huggingface \
-  -v screencastgen-torch:/root/.cache/torch \
-  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
-  -w /workspace \
-  screencastgen:gpu \
-  screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4 --device cuda
-docker compose -f docker-compose.gpu.yml up --build
-```
-
-## Web Application Setup
-
-The simplest full-stack launch uses Docker:
+Prepare the web app:
 
 ```bash
 cd web
-docker compose up --build
-```
-
-The frontend is available at `http://localhost:5173` and the API at
-`http://localhost:8000`.
-
-For local development on Linux, macOS, or WSL2, start PostgreSQL and Redis,
-then run:
-
-```bash
-cd web
-cp .env.example .env
 make install
 make migrate
-# In separate terminals:
+```
+
+Then run the backend, worker, and frontend in separate terminals:
+
+```bash
+cd web
 make backend
+```
+
+```bash
+cd web
 make worker
+```
+
+```bash
+cd web
 make frontend
 ```
 
-Native Windows users can use Docker Desktop or run the equivalent commands from
-PowerShell after activating `.venv`.
+The frontend runs on `http://localhost:5173` and the backend runs on
+`http://localhost:8000`.
 
-Configure the remote GPU and storage in `web/.env`:
+## 4. Troubleshooting
 
-```dotenv
-P2A_TTS_SERVER_URL=http://gpu-vm:8100
-P2A_STORAGE_BACKEND=local
-# P2A_STORAGE_BUCKET=my-bucket
-# P2A_STORAGE_PREFIX=screencastgen
-# P2A_STORAGE_REGION=us-east-1
+If Docker cannot see the GPU, rerun:
+
+```bash
+sudo docker run --rm --gpus all nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04 nvidia-smi
 ```
 
-Storage can be `local`, `gcs`, or `s3`. Pipelines work in local directories;
-the storage layer downloads inputs and uploads completed outputs as needed.
+If this fails, fix the NVIDIA Docker runtime before continuing.
 
-## WhisperX CUDA Troubleshooting
+If the web UI is not reachable from your machine:
 
-WhisperX may fall back to CPU when CUDA is visible but the cuDNN 8 runtime it
-expects is unavailable. A common error is:
+- Confirm the compose stack is running.
+- Confirm your VM or cloud firewall allows inbound TCP traffic on `WEB_PORT`.
+- Run `curl http://localhost:8000/api/health` on the VM.
+- Run `curl http://localhost:8100/health` on the VM.
 
-```text
-Could not load library libcudnn_ops_infer.so.8
+If a job fails, inspect the worker and GPU server logs:
+
+```bash
+sudo docker compose -f docker-compose.gpu-web.yml logs -f worker
+sudo docker compose -f docker-compose.gpu-web.yml logs -f gpu-server
 ```
 
-Diagnose the active environment on a Linux GPU host:
+If WhisperX falls back to CPU or reports a cuDNN library error during source
+installation, inspect the active environment:
 
 ```bash
 ldconfig -p | grep cudnn
 find "$VIRTUAL_ENV" -name 'libcudnn_ops_infer.so*' 2>/dev/null
 python -c "import torch; print(torch.__version__, torch.version.cuda)"
 ```
-
-If the library exists inside the environment, expose its directory before
-starting the server:
-
-```bash
-export CUDNN_LIB_DIR="$VIRTUAL_ENV/lib/python3.10/site-packages/nvidia/cudnn/lib"
-export LD_LIBRARY_PATH="$CUDNN_LIB_DIR:$LD_LIBRARY_PATH"
-python -c "import ctypes; ctypes.CDLL('libcudnn_ops_infer.so.8'); print('ok')"
-```
-
-If it is absent, install a compatible runtime:
-
-```bash
-uv pip install "nvidia-cudnn-cu12<9"
-```
-
-The built-in fallback keeps transcription and alignment working on CPU until
-the GPU runtime is corrected.
-
-## Dependencies by Feature
-
-| Feature | Key packages |
-|---------|--------------|
-| Core | PyPDF2 |
-| Remote client | pydub, moviepy, Pillow, pymupdf |
-| Qwen3 TTS | qwen-tts, torch, soundfile |
-| Highlight video | whisperx, moviepy, Pillow, torch, pymupdf |
-| Lip-sync video | highlight dependencies, LatentSync, ffmpeg |
-| GPU server | fastapi, uvicorn, python-multipart |
-| Web app | fastapi, sqlalchemy, celery, redis, asyncpg |
-| Web frontend | React, React Router, Axios, Tailwind CSS |
-| Cloud storage | google-cloud-storage or boto3 |
-| Development | pytest, reportlab |
-
-See [Model Dependencies and References](https://github.com/ShaShekhar/screencastgen#model-dependencies-and-references)
-for upstream repositories, model cards, licenses, and citation information.
