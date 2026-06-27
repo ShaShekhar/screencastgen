@@ -1,0 +1,143 @@
+2026-05-15 22:52:57 INFO [worker] Logging initialized -> logs/worker.log
+2026-05-15 22:53:27 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-20 23:39:16 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-20 23:43:13 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-22 13:05:43 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-22 13:17:09 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-22 13:28:48 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-22 17:05:26 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-22 19:58:27 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-22 19:58:27 ERROR [web.backend.tasks.transcription] Transcription failed for upload 8bbee1f7-755c-44c3-999e-30f16f3f170e
+Traceback (most recent call last):
+  File "/media/shashank/Data2/screencastgen/web/backend/tasks/transcription.py", line 42, in transcribe_upload_task
+    raise RuntimeError("Transcription returned no text")
+RuntimeError: Transcription returned no text
+2026-06-22 19:59:11 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-22 19:59:11 ERROR [web.backend.tasks.transcription] Transcription failed for upload dce99cd7-3a53-4765-b079-c9fe03baf4ba
+Traceback (most recent call last):
+  File "/media/shashank/Data2/screencastgen/web/backend/tasks/transcription.py", line 42, in transcribe_upload_task
+    raise RuntimeError("Transcription returned no text")
+RuntimeError: Transcription returned no text
+2026-06-22 19:59:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:13 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:13 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:13 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:14 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:14 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:14 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:14 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:14 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:14 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:14 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:14 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 19:59:14 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:07:51 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-22 20:08:30 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-22 20:08:31 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:31 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:32 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:08:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:07 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-22 20:10:09 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:09 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:11 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-22 20:10:12 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:38 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-23 00:11:39 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:39 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:39 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 00:11:40 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:12 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-23 17:09:14 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:15 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:15 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:41 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-23 17:09:42 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:42 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:44 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:09:45 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:11:38 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-23 17:11:50 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-23 17:11:50 INFO [web.backend.tasks.pipelines] Starting lip-sync EPUB export for job 7c898418-4ed4-4774-9340-a89dc83944e2
+2026-06-23 17:11:50 INFO [web.backend.tasks.pipelines] Lip-sync EPUB export complete for job 7c898418-4ed4-4774-9340-a89dc83944e2 -> document_lipsync.epub
+2026-06-23 17:12:01 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-23 17:12:02 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:02 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:04 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 17:12:05 INFO [web.backend.tasks.pipelines] Starting lip-sync EPUB export for job 1728d99d-d1fe-456e-b8a4-4e5c7b87a9d4
+2026-06-23 17:12:05 INFO [web.backend.tasks.pipelines] Lip-sync EPUB export complete for job 1728d99d-d1fe-456e-b8a4-4e5c7b87a9d4 -> document_lipsync.epub
+2026-06-23 19:56:52 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-23 19:56:53 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 19:56:55 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 19:56:55 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 19:56:56 INFO [web.backend.tasks.pipelines] Starting lip-sync EPUB export for job 93882b7a-e26b-45c2-aeb6-60d053c34c77
+2026-06-23 19:56:56 INFO [web.backend.tasks.pipelines] Lip-sync EPUB export complete for job 93882b7a-e26b-45c2-aeb6-60d053c34c77 -> document_lipsync.epub
+2026-06-23 20:01:31 INFO [worker] Logging initialized -> logs/worker.log
+2026-06-23 20:01:32 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:33 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:34 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:34 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:34 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:34 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:35 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:35 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:35 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:35 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:35 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:35 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:35 WARNING [PyPDF2._reader] incorrect startxref pointer(1)
+2026-06-23 20:01:35 INFO [web.backend.tasks.pipelines] Starting lip-sync EPUB export for job 971b687a-750c-47d1-b08b-2c5f60d68399
+2026-06-23 20:01:35 INFO [web.backend.tasks.pipelines] Lip-sync EPUB export complete for job 971b687a-750c-47d1-b08b-2c5f60d68399 -> document_lipsync.epub

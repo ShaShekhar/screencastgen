@@ -1,0 +1,65 @@
+.git
+.agents
+.codex
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv
+.venvs
+venv
+env
+__pycache__
+*.py[cod]
+*.egg-info
+
+# Local runtime data and generated media
+logs
+outputs
+output
+artifacts
+tmp
+temp
+uploads
+data
+*.mp3
+*.mp4
+*.wav
+*.m4a
+*.ogg
+*.flac
+*.mov
+*.avi
+*.mkv
+*.webm
+
+# Model and package caches
+external
+models
+checkpoints
+.cache
+huggingface
+torch
+
+# Frontend dependency/build outputs
+web/frontend/node_modules
+web/frontend/dist
+web/frontend/.vite
+web/frontend/.cache
+
+# Credentials and local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# Editor and OS metadata
+.DS_Store
+Thumbs.db
+.idea
+.vscode

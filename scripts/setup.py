@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 VENV = ROOT / ".venv"
 FRONTEND = ROOT / "web" / "frontend"
+NODE_LTS_MAJOR = 24
 
 
 def is_wsl() -> bool:
@@ -77,7 +78,9 @@ def install_hint(missing: list[str]) -> str:
         return "\n".join(
             [
                 "Install the missing tools with dnf:",
-                "  sudo dnf install git nodejs npm ffmpeg gcc-c++ make",
+                "  sudo dnf install git ffmpeg gcc-c++ make python3-devel",
+                f"  curl -fsSL https://rpm.nodesource.com/setup_{NODE_LTS_MAJOR}.x | sudo bash -",
+                "  sudo dnf install nodejs",
                 "  curl -LsSf https://astral.sh/uv/install.sh | sh",
                 "  exec \"$SHELL\"",
                 "Install the NVIDIA driver separately when nvidia-smi is missing.",
@@ -86,7 +89,10 @@ def install_hint(missing: list[str]) -> str:
     return (
         "Install the missing tools on Debian/Ubuntu with:\n"
         "  sudo apt-get update\n"
-        "  sudo apt-get install -y curl ca-certificates git nodejs npm ffmpeg build-essential\n"
+        "  sudo apt-get install -y curl ca-certificates git ffmpeg "
+        "build-essential python3.10-dev\n"
+        f"  curl -fsSL https://deb.nodesource.com/setup_{NODE_LTS_MAJOR}.x | sudo -E bash -\n"
+        "  sudo apt-get install -y nodejs\n"
         "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
         "  exec \"$SHELL\"\n"
         "build-essential provides gcc, g++, and make. Install the NVIDIA driver "

@@ -11,6 +11,10 @@ from screencastgen import cli
 from screencastgen.doctor import CheckResult, _remote_server, resolve_profile, run_doctor
 
 
+BASE_COMMANDS = ("git", "uv", "node", "npm", "ffmpeg", "ffprobe")
+LOCAL_GPU_COMMANDS = BASE_COMMANDS + ("gcc", "g++", "make", "nvidia-smi", "bash")
+
+
 def _load_setup_module():
     path = Path(__file__).resolve().parents[1] / "scripts" / "setup.py"
     spec = importlib.util.spec_from_file_location("screencastgen_setup", path)
@@ -18,6 +22,10 @@ def _load_setup_module():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def _available(commands: tuple[str, ...]) -> dict[str, str]:
+    return {name: f"/bin/{name}" for name in commands}
 
 
 def test_doctor_auto_selects_local_gpu_on_linux_with_nvidia():
@@ -114,9 +122,11 @@ def test_setup_preflight_prints_debian_prerequisite_commands(capsys):
     output = capsys.readouterr().out
     assert "sudo apt-get update" in output
     assert (
-        "sudo apt-get install -y curl ca-certificates git nodejs npm ffmpeg "
-        "build-essential"
+        "sudo apt-get install -y curl ca-certificates git ffmpeg "
+        "build-essential python3.10-dev"
     ) in output
+    assert "curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -" in output
+    assert "sudo apt-get install -y nodejs" in output
     assert "curl -LsSf https://astral.sh/uv/install.sh | sh" in output
     assert (
         "uv installation: https://docs.astral.sh/uv/getting-started/installation/"
@@ -126,15 +136,7 @@ def test_setup_preflight_prints_debian_prerequisite_commands(capsys):
 
 def test_setup_preflight_local_gpu_hint_mentions_build_essential(capsys):
     setup = _load_setup_module()
-    available = {
-        "git": "/bin/git",
-        "uv": "/bin/uv",
-        "node": "/bin/node",
-        "npm": "/bin/npm",
-        "ffmpeg": "/bin/ffmpeg",
-        "ffprobe": "/bin/ffprobe",
-        "bash": "/bin/bash",
-    }
+    available = _available(BASE_COMMANDS + ("bash",))
     with patch.object(setup.platform, "system", return_value="Linux"), patch.object(
         setup.shutil, "which", side_effect=lambda name: available.get(name)
     ), patch.object(setup.Path, "read_text", return_value="ID=ubuntu"):
@@ -147,20 +149,7 @@ def test_setup_preflight_local_gpu_hint_mentions_build_essential(capsys):
 
 def test_native_windows_rejects_local_gpu_profile():
     setup = _load_setup_module()
-    commands = (
-        "git",
-        "uv",
-        "node",
-        "npm",
-        "ffmpeg",
-        "ffprobe",
-        "gcc",
-        "g++",
-        "make",
-        "nvidia-smi",
-        "bash",
-    )
-    available = {name: f"/bin/{name}" for name in commands}
+    available = _available(LOCAL_GPU_COMMANDS)
     with patch.object(setup.platform, "system", return_value="Windows"), patch.object(
         setup.shutil, "which", side_effect=lambda name: available.get(name)
     ):

@@ -1,0 +1,42 @@
+ARG CUDA_IMAGE=nvidia/cuda:12.2.2-cudnn8-devel-ubuntu22.04
+FROM ${CUDA_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/root/.cache/huggingface \
+    TORCH_HOME=/root/.cache/torch \
+    LATENTSYNC_ROOT=/opt/latentsync \
+    LATENTSYNC_PYTHON=/opt/latentsync-env/bin/python
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    curl \
+    ffmpeg \
+    git \
+    libgl1 \
+    libglib2.0-0 \
+    python3.10 \
+    python3.10-dev \
+    python3.10-venv \
+    python3-pip \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN ln -sf /usr/bin/python3.10 /usr/local/bin/python \
+  && ln -sf /usr/bin/python3.10 /usr/local/bin/python3 \
+  && python3.10 -m pip install --upgrade pip setuptools wheel uv
+
+WORKDIR /app
+COPY . .
+
+RUN python3.10 -m pip install -e ".[all]"
+
+RUN bash scripts/install_latentsync.sh \
+    --root "${LATENTSYNC_ROOT}" \
+    --env /opt/latentsync-env \
+    --skip-checkpoints
+
+VOLUME ["/root/.cache/huggingface", "/root/.cache/torch", "/opt/latentsync/checkpoints"]
+
+CMD ["screencastgen", "--help"]

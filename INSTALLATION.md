@@ -6,9 +6,9 @@ selection, model weights, local and remote GPU setup, and the web application.
 ## Platform Support
 
 All platforms need Git, [uv](https://docs.astral.sh/uv/getting-started/installation/),
-Node.js/npm, and FFmpeg (`ffmpeg` and `ffprobe` on `PATH`). The setup program
-checks these tools and prints platform-specific guidance; it never installs
-system packages or requests administrator privileges.
+Node.js 18 or newer, npm, and FFmpeg (`ffmpeg` and `ffprobe` on `PATH`). The
+setup program checks these tools and prints platform-specific guidance; it never
+installs system packages or requests administrator privileges.
 
 Local Qwen, WhisperX, and LatentSync execution additionally needs Linux or WSL2
 with an NVIDIA GPU and a working driver.
@@ -30,7 +30,9 @@ On Debian or Ubuntu VMs:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y curl ca-certificates git nodejs npm ffmpeg build-essential
+sudo apt-get install -y curl ca-certificates git ffmpeg build-essential python3.10-dev
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt-get install -y nodejs
 curl -LsSf https://astral.sh/uv/install.sh | sh
 exec "$SHELL"
 
@@ -39,9 +41,12 @@ python3 scripts/setup.py --check
 python3 scripts/setup.py
 ```
 
-`build-essential` provides `gcc`, `g++`, and `make`. The `ffmpeg` package
-provides both `ffmpeg` and `ffprobe`. `nodejs` and `npm` are required for the
-React frontend build, and `uv` creates the Python environment used by setup.
+`build-essential` provides `gcc`, `g++`, and `make`. `python3.10-dev` provides
+`Python.h`, which is needed when native Python extensions such as `insightface`
+compile during local GPU setup. The `ffmpeg` package provides both `ffmpeg` and
+`ffprobe`. The NodeSource commands install the current Node.js LTS release,
+including `npm`, for the React frontend build. `uv` creates the Python
+environment used by setup.
 
 For a local GPU install, the VM also needs an NVIDIA driver that makes
 `nvidia-smi` work before setup runs. Install the driver using your cloud image,
@@ -52,7 +57,9 @@ Other common platforms:
 
 ```bash
 # Fedora/RHEL
-sudo dnf install git nodejs npm ffmpeg gcc-c++ make
+sudo dnf install git ffmpeg gcc-c++ make python3-devel
+curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -
+sudo dnf install nodejs
 curl -LsSf https://astral.sh/uv/install.sh | sh
 exec "$SHELL"
 
@@ -162,6 +169,14 @@ not conflict with WhisperX. This local path is supported on Linux and WSL2.
 scripts/install_latentsync.sh
 ```
 
+To install the LatentSync code and Python dependencies without downloading model
+weights, such as when building a Docker image that will mount checkpoints at
+runtime:
+
+```bash
+scripts/install_latentsync.sh --skip-checkpoints
+```
+
 Default locations:
 
 - `external/LatentSync` for the upstream repository
@@ -202,6 +217,82 @@ screencastgen highlight MyBook.pdf --backend remote --tts-server-url http://gpu-
 
 On Windows PowerShell, use `py scripts/setup.py` and
 `.venv\Scripts\Activate.ps1` instead.
+
+## GPU Docker VM Setup
+
+Use the root GPU Docker image on an NVIDIA VM with Docker and NVIDIA Container
+Toolkit installed. Model weights are stored in Docker volumes, not baked into
+the image layers.
+
+Build the image on the VM:
+
+```bash
+docker build -f Dockerfile.gpu -t screencastgen:gpu .
+```
+
+Confirm GPU passthrough from the VM container runtime:
+
+```bash
+docker run --rm --gpus all screencastgen:gpu nvidia-smi
+```
+
+Preload Qwen, WhisperX, and LatentSync weights into persistent named volumes:
+
+```bash
+docker run --rm --gpus all \
+  -v screencastgen-hf:/root/.cache/huggingface \
+  -v screencastgen-torch:/root/.cache/torch \
+  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
+  screencastgen:gpu \
+  screencastgen download-models --backend qwen --package whisperx --package latentsync
+```
+
+Run a lip-sync job from the repository workspace mounted into the container:
+
+```bash
+docker run --rm --gpus all \
+  -v "$PWD:/workspace" \
+  -v screencastgen-hf:/root/.cache/huggingface \
+  -v screencastgen-torch:/root/.cache/torch \
+  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
+  -w /workspace \
+  screencastgen:gpu \
+  screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4 --device cuda
+```
+
+Start the GPU inference server with Docker Compose:
+
+```bash
+docker compose -f docker-compose.gpu.yml up --build
+```
+
+Recommended VM verification sequence:
+
+```bash
+docker build -f Dockerfile.gpu -t screencastgen:gpu .
+docker run --rm --gpus all screencastgen:gpu nvidia-smi
+docker run --rm --gpus all \
+  -v screencastgen-hf:/root/.cache/huggingface \
+  -v screencastgen-torch:/root/.cache/torch \
+  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
+  screencastgen:gpu \
+  screencastgen download-models --backend qwen --package whisperx --package latentsync
+docker run --rm --gpus all \
+  -v screencastgen-hf:/root/.cache/huggingface \
+  -v screencastgen-torch:/root/.cache/torch \
+  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
+  screencastgen:gpu \
+  screencastgen doctor --profile local-gpu
+docker run --rm --gpus all \
+  -v "$PWD:/workspace" \
+  -v screencastgen-hf:/root/.cache/huggingface \
+  -v screencastgen-torch:/root/.cache/torch \
+  -v screencastgen-latentsync:/opt/latentsync/checkpoints \
+  -w /workspace \
+  screencastgen:gpu \
+  screencastgen lipsync MyBook.pdf --ref-audio voice.wav --ref-video face.mp4 --device cuda
+docker compose -f docker-compose.gpu.yml up --build
+```
 
 ## Web Application Setup
 

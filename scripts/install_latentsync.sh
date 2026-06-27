@@ -7,6 +7,7 @@ LATENTSYNC_ENV="${PROJECT_ROOT}/.venvs/latentsync"
 HF_REPO="ByteDance/LatentSync-1.6"
 CHECKPOINT_FILE="latentsync_unet.pt"
 AUDIO_CHECKPOINT="whisper/tiny.pt"
+SKIP_CHECKPOINTS=0
 
 usage() {
   cat <<EOF
@@ -18,6 +19,7 @@ Options:
   --hf-repo REPO             Hugging Face repo for checkpoints
   --checkpoint-file FILE     Main checkpoint filename in the Hugging Face repo
   --audio-checkpoint FILE    Audio checkpoint filename in the Hugging Face repo
+  --skip-checkpoints         Install LatentSync dependencies without downloading checkpoints
   -h, --help                 Show this help
 EOF
 }
@@ -89,6 +91,10 @@ while [[ $# -gt 0 ]]; do
       AUDIO_CHECKPOINT="$2"
       shift 2
       ;;
+    --skip-checkpoints)
+      SKIP_CHECKPOINTS=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -117,13 +123,17 @@ uv venv --python 3.10 "${LATENTSYNC_ENV}"
 LATENTSYNC_PYTHON="${LATENTSYNC_ENV}/bin/python"
 uv pip install --python "${LATENTSYNC_PYTHON}" -r "${LATENTSYNC_ROOT}/requirements.txt"
 
-"${LATENTSYNC_PYTHON}" \
-  "${PROJECT_ROOT}/screencastgen/providers/lipsync/latentsync_worker.py" \
-  download-checkpoints \
-  --hf-repo "${HF_REPO}" \
-  --local-dir "${LATENTSYNC_ROOT}/checkpoints" \
-  --checkpoint-file "${CHECKPOINT_FILE}" \
-  --audio-checkpoint "${AUDIO_CHECKPOINT}"
+if [[ "${SKIP_CHECKPOINTS}" -eq 0 ]]; then
+  "${LATENTSYNC_PYTHON}" \
+    "${PROJECT_ROOT}/screencastgen/providers/lipsync/latentsync_worker.py" \
+    download-checkpoints \
+    --hf-repo "${HF_REPO}" \
+    --local-dir "${LATENTSYNC_ROOT}/checkpoints" \
+    --checkpoint-file "${CHECKPOINT_FILE}" \
+    --audio-checkpoint "${AUDIO_CHECKPOINT}"
+else
+  echo "Skipping LatentSync checkpoint download."
+fi
 
 cat <<EOF
 

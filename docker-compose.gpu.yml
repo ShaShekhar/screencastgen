@@ -1,0 +1,37 @@
+services:
+  gpu-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    image: screencastgen:gpu
+    command:
+      - screencastgen-server
+      - --backend
+      - qwen
+      - --device
+      - cuda
+      - --aligner
+      - whisperx
+      - --lipsync-provider
+      - latentsync
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8100"
+    ports:
+      - "8100:8100"
+    gpus: all
+    environment:
+      HF_HOME: /root/.cache/huggingface
+      TORCH_HOME: /root/.cache/torch
+      LATENTSYNC_ROOT: /opt/latentsync
+      LATENTSYNC_PYTHON: /opt/latentsync-env/bin/python
+    volumes:
+      - screencastgen-hf:/root/.cache/huggingface
+      - screencastgen-torch:/root/.cache/torch
+      - screencastgen-latentsync:/opt/latentsync/checkpoints
+
+volumes:
+  screencastgen-hf:
+  screencastgen-torch:
+  screencastgen-latentsync:
