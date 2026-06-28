@@ -40,8 +40,8 @@ PRESETS: Dict[str, LatentSyncPreset] = {
     "small": LatentSyncPreset(
         name="small",
         config_candidates=(
-            ("configs", "unet", "stage2.yaml"),
             ("configs", "unet", "stage2_256.yaml"),
+            ("configs", "unet", "stage2.yaml"),
         ),
         checkpoint_candidates=(
             "LATENTSYNC_SMALL_CKPT",
@@ -53,6 +53,23 @@ PRESETS: Dict[str, LatentSyncPreset] = {
         ),
         guidance_scale=1.0,
         inference_steps=20,
+    ),
+    "balanced_256": LatentSyncPreset(
+        name="balanced_256",
+        config_candidates=(
+            ("configs", "unet", "stage2_256.yaml"),
+            ("configs", "unet", "stage2.yaml"),
+        ),
+        checkpoint_candidates=(
+            "LATENTSYNC_SMALL_CKPT",
+            "LATENTSYNC_CKPT",
+            "checkpoints/latentsync_unet_1_5.pt",
+            "checkpoints/latentsync_unet_256.pt",
+            "checkpoints/latentsync_unet_small.pt",
+            "checkpoints/latentsync_unet.pt",
+        ),
+        guidance_scale=1.5,
+        inference_steps=30,
     ),
     "quality": LatentSyncPreset(
         name="quality",

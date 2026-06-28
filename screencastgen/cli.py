@@ -234,8 +234,11 @@ def _build_parser() -> argparse.ArgumentParser:
     ls_p.add_argument(
         "--latentsync-preset",
         default="quality",
-        choices=["small", "quality"],
-        help="LatentSync preset: small (256) or quality (512) (default: quality)",
+        choices=["small", "balanced_256", "quality"],
+        help=(
+            "LatentSync preset: small (256 fast), balanced_256 "
+            "(256, guidance 1.5, 30 steps), or quality (512) (default: quality)"
+        ),
     )
 
     viz_p = sub.add_parser("visualize", help="Create a generated educational math animation")

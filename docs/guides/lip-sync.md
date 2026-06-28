@@ -27,8 +27,9 @@ sidecar environment, and downloaded checkpoints.
 | `mp4` | Precomposed video at a fixed resolution and presenter position |
 
 For reader and video layouts, configure `--face-position` and `--face-scale`.
-Choose `--latentsync-preset small` for a lower-resolution model path or
-`quality` for the default higher-resolution path.
+Choose `--latentsync-preset small` for the fast 256px path,
+`balanced_256` for the 256px path with guidance 1.5 and 30 inference steps,
+or `quality` for the 512px path.
 
 To run inference elsewhere, combine the command with `--backend remote` and
 the [remote GPU setup](remote-gpu.md).

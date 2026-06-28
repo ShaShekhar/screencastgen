@@ -13,6 +13,7 @@ from screencastgen.providers.lipsync.latentsync_provider import (
     _SESSIONS,
     _close_all_sessions,
     _get_inference_timeout_seconds,
+    _resolve_config_path,
     close_idle_latentsync_sessions,
     download_latentsync_checkpoints,
     find_latentsync_python,
@@ -160,6 +161,47 @@ def test_latentsync_session_sends_json_requests(tmp_path):
         "audio_path": "input.wav",
         "output_path": str(output_path),
     }
+
+
+def test_balanced_256_preset_uses_refined_256_parameters(tmp_path):
+    root = _make_latentsync_root(tmp_path / "LatentSync")
+    python_path = _make_executable(tmp_path / "python")
+    config_path = tmp_path / "stage2_256.yaml"
+    config_path.write_text("dummy", encoding="utf-8")
+    checkpoint_path = tmp_path / "latentsync_unet.pt"
+    checkpoint_path.write_text("dummy", encoding="utf-8")
+
+    spec = LatentSyncRuntimeSpec(
+        root=root,
+        python_executable=python_path,
+        device="cuda",
+        preset=PRESETS["balanced_256"],
+        config_path=str(config_path),
+        checkpoint_path=str(checkpoint_path),
+        temp_dir=str(tmp_path / "temp"),
+    )
+
+    session = object.__new__(LatentSyncSession)
+    session.spec = spec
+    command = session._command()
+
+    assert "--inference-steps" in command
+    assert command[command.index("--inference-steps") + 1] == "30"
+    assert "--guidance-scale" in command
+    assert command[command.index("--guidance-scale") + 1] == "1.5"
+
+
+def test_256_presets_prefer_explicit_256_config(tmp_path):
+    root = _make_latentsync_root(tmp_path / "LatentSync")
+    config_dir = tmp_path / "LatentSync" / "configs" / "unet"
+    config_dir.mkdir(parents=True)
+    stage2 = config_dir / "stage2.yaml"
+    stage2_256 = config_dir / "stage2_256.yaml"
+    stage2.write_text("legacy", encoding="utf-8")
+    stage2_256.write_text("explicit", encoding="utf-8")
+
+    assert _resolve_config_path(root, PRESETS["small"]) == str(stage2_256)
+    assert _resolve_config_path(root, PRESETS["balanced_256"]) == str(stage2_256)
 
 
 def test_close_idle_latentsync_sessions_closes_cached_worker(tmp_path):

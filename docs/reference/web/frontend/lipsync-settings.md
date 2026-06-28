@@ -24,7 +24,7 @@
 | Reference video | [FileUploader](file-uploader.md) | Face and voice video (~10s clip); embedded audio is used as the default voice reference |
 | Reference audio override | [FileUploader](file-uploader.md) | Optional audio clip when the reference video's audio should not be used |
 | Face position | select | `bottom-right`, `top-right`, `bottom-left`, `top-left`, `left`, `right`, `center` |
-| LatentSync preset | select | `small` (256px docked presenter) or `quality` (512px) |
+| LatentSync preset | select | `small` (256px fast), `balanced_256` (256px refined), or `quality` (512px) |
 | Presenter scale | slider | 0.12 – 0.4 |
 
 ---
