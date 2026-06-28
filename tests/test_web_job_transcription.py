@@ -174,6 +174,7 @@ def test_reference_video_audio_extraction_uses_short_audio_stream(monkeypatch, t
         "0:a:0",
         "-vn",
     ]
+    assert calls["cmd"][calls["cmd"].index("-ar") + 1] == "24000"
     assert calls["cmd"][calls["cmd"].index("-t") + 1] == "8"
     assert calls["kwargs"]["timeout"] == pipelines.REFERENCE_AUDIO_EXTRACT_TIMEOUT_SECONDS
 

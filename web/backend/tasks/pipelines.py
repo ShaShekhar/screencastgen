@@ -42,6 +42,7 @@ from ..services.transcribe_client import transcribe_upload
 logger = logging.getLogger(__name__)
 
 REFERENCE_VIDEO_AUDIO_SECONDS = 8
+REFERENCE_VIDEO_AUDIO_SAMPLE_RATE = 24000
 REFERENCE_AUDIO_EXTRACT_TIMEOUT_SECONDS = 60
 _REF_TEXT_PLACEHOLDERS = {
     "exact transcript of the speech in the presenter video.",
@@ -317,7 +318,7 @@ def _extract_reference_audio_from_video(video_path: str, output_dir: str) -> str
         "-ac",
         "1",
         "-ar",
-        "16000",
+        str(REFERENCE_VIDEO_AUDIO_SAMPLE_RATE),
         "-t",
         str(REFERENCE_VIDEO_AUDIO_SECONDS),
         audio_path,
