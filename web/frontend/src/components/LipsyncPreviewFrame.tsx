@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import { lipsyncPresetVideoUrl } from "../api/lipsyncPresets";
 import { getUploadPreviewUrl } from "../api/uploads";
 import type { LipsyncConfig, UploadedFile } from "../types";
 
@@ -80,9 +81,12 @@ export default function LipsyncPreviewFrame({ uploadedFile, config }: Props) {
   // `null` means "follow the seeded corner"; a point means the user dragged it.
   const [pipPos, setPipPos] = useState<{ x: number; y: number } | null>(null);
 
-  const canPreview = !!uploadedFile && !!config.ref_video_file_id;
+  const canPreview =
+    !!uploadedFile && (!!config.preset_id || !!config.ref_video_file_id);
   const documentUrl = uploadedFile ? getUploadPreviewUrl(uploadedFile.id) : null;
-  const videoUrl = config.ref_video_file_id
+  const videoUrl = config.preset_id
+    ? lipsyncPresetVideoUrl(config.preset_id)
+    : config.ref_video_file_id
     ? getUploadPreviewUrl(config.ref_video_file_id)
     : null;
   const isText = isTextDocument(uploadedFile);

@@ -5,7 +5,9 @@ from unittest.mock import Mock
 import uuid
 
 import pytest
+from pydantic import ValidationError
 
+from web.backend.schemas import LipsyncConfig
 from web.backend.tasks import pipelines
 
 
@@ -79,6 +81,55 @@ def test_lipsync_transcribes_uploaded_reference_audio_during_job(monkeypatch):
 
     assert request.ref_text == "lip sync reference"
     assert uploaded.ref_text == request.ref_text
+
+
+def test_lipsync_uses_bundled_preset_paths_without_uploads(monkeypatch):
+    from web.backend.services import lipsync_presets
+
+    preset = SimpleNamespace(
+        id="default-presenter",
+        video_exists=True,
+        audio_exists=True,
+        video_abs_path="/presets/default-presenter.mp4",
+        audio_abs_path="/presets/default-presenter.wav",
+        audio_file="default-presenter.wav",
+        ref_text="bundled reference text",
+        language="en-US",
+    )
+    transcribe = Mock()
+    monkeypatch.setattr(lipsync_presets, "get_lipsync_preset", lambda _id: preset)
+    monkeypatch.setattr(pipelines, "transcribe_upload", transcribe)
+
+    request = pipelines._build_lipsync_request(
+        SimpleNamespace(
+            config_json={"preset_id": "default-presenter"},
+            ref_audio_file_id=uuid.uuid4(),
+            ref_video_file_id=uuid.uuid4(),
+        ),
+        "/tmp/document.pdf",
+        "/tmp/output",
+        _Session(None),
+    )
+
+    assert request.ref_video == "/presets/default-presenter.mp4"
+    assert request.ref_audio == "/presets/default-presenter.wav"
+    assert request.ref_text == "bundled reference text"
+    transcribe.assert_not_called()
+
+
+def test_lipsync_config_accepts_bundled_preset_without_uploaded_refs():
+    cfg = LipsyncConfig(preset_id="default-presenter")
+
+    assert cfg.preset_id == "default-presenter"
+    assert cfg.ref_video_file_id is None
+
+
+def test_lipsync_config_rejects_mixed_preset_and_upload_refs():
+    with pytest.raises(ValidationError, match="preset_id"):
+        LipsyncConfig(
+            preset_id="default-presenter",
+            ref_video_file_id=uuid.uuid4(),
+        )
 
 
 def test_job_fails_clearly_when_reference_transcription_fails(monkeypatch):

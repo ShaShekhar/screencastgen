@@ -28,14 +28,19 @@ RUN ln -sf /usr/bin/python3.10 /usr/local/bin/python \
   && python3.10 -m pip install --upgrade pip setuptools wheel uv
 
 WORKDIR /app
-COPY . .
 
-RUN python3.10 -m pip install -e ".[all]"
+COPY requirements.txt pyproject.toml ./
+RUN python3.10 -m pip install -r requirements.txt
+
+COPY scripts/install_latentsync.sh scripts/install_latentsync.sh
 
 RUN bash scripts/install_latentsync.sh \
     --root "${LATENTSYNC_ROOT}" \
     --env /opt/latentsync-env \
     --skip-checkpoints
+
+COPY . .
+RUN python3.10 -m pip install --no-deps -e .
 
 VOLUME ["/root/.cache/huggingface", "/root/.cache/torch", "/opt/latentsync/checkpoints"]
 

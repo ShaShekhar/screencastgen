@@ -707,7 +707,7 @@ export default function Reader() {
                   title="Text and narration only; reader compatibility varies"
                   className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] transition"
                 >
-                  ↓ Read-along EPUB
+                  Download EPUB
                 </a>
               ) : epubStatus === "running" ? (
                 <span className="text-xs text-[var(--reader-muted)] px-1">
@@ -726,7 +726,7 @@ export default function Reader() {
                 >
                   {epubStatus === "failed"
                     ? "Retry EPUB export"
-                    : "Export read-along EPUB"}
+                    : "Export EPUB"}
                 </button>
               )}
             </>

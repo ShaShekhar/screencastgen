@@ -1,4 +1,4 @@
-import { ChangeEvent, DragEvent, useCallback, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useCallback, useMemo, useRef, useState } from "react";
 import { getUploadPreviewUrl, uploadFile } from "../api/uploads";
 import { UploadedFile } from "../types";
 
@@ -22,10 +22,45 @@ export default function FileUploader({
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const acceptedTypes = useMemo(
+    () =>
+      accept
+        .split(",")
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean),
+    [accept]
+  );
+
+  const isAcceptedFile = useCallback(
+    (file: File) => {
+      if (acceptedTypes.length === 0) return true;
+
+      const name = file.name.toLowerCase();
+      const type = file.type.toLowerCase();
+
+      return acceptedTypes.some((accepted) => {
+        if (accepted.startsWith(".")) return name.endsWith(accepted);
+        if (accepted.endsWith("/*")) {
+          return type.startsWith(accepted.slice(0, -1));
+        }
+        return type === accepted;
+      });
+    },
+    [acceptedTypes]
+  );
 
   const handleFile = useCallback(
     async (file: File) => {
       setError(null);
+      if (!isAcceptedFile(file)) {
+        setFileName(null);
+        setUploadedFile(null);
+        setError(
+          `Unsupported file type. Please ${label.charAt(0).toLowerCase()}${label.slice(1)}.`
+        );
+        return;
+      }
+
       setUploading(true);
       setFileName(file.name);
       setUploadedFile(null);
@@ -44,7 +79,7 @@ export default function FileUploader({
         setUploading(false);
       }
     },
-    [onUploaded]
+    [isAcceptedFile, label, onUploaded]
   );
 
   const onDrop = useCallback(

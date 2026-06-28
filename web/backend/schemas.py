@@ -54,8 +54,9 @@ class HighlightConfig(AudioConfig):
 
 
 class LipsyncConfig(BaseModel):
+    preset_id: Optional[str] = None
     ref_audio_file_id: Optional[UUID] = None
-    ref_video_file_id: UUID
+    ref_video_file_id: Optional[UUID] = None
     backend: str = "remote"
     aligner: str = "whisperx"
     face_position: str = "bottom-right"
@@ -69,7 +70,14 @@ class LipsyncConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
     @model_validator(mode="after")
-    def _check_format(self) -> "LipsyncConfig":
+    def _check_lipsync_config(self) -> "LipsyncConfig":
+        if self.preset_id:
+            if self.ref_video_file_id or self.ref_audio_file_id:
+                raise ValueError(
+                    "Provide either preset_id (bundled) or uploaded reference files, not both"
+                )
+        elif not self.ref_video_file_id:
+            raise ValueError("Provide either preset_id or ref_video_file_id")
         if self.format not in ("reader", "mp4", "epub"):
             raise ValueError("format must be 'reader', 'mp4', or 'epub'")
         return self

@@ -82,14 +82,25 @@ export interface BundledVoice {
   available: boolean;
 }
 
+export interface LipsyncPreset {
+  id: string;
+  name: string;
+  language: string;
+  description: string;
+  ref_text: string;
+  has_audio: boolean;
+  available: boolean;
+}
+
 export interface LanguageOption {
   code: string;
   name: string;
 }
 
 export interface LipsyncConfig {
+  preset_id?: string | null;
   ref_audio_file_id?: string | null;
-  ref_video_file_id: string;
+  ref_video_file_id?: string | null;
   backend?: string;
   tts_server_url?: string;
   face_position: string;

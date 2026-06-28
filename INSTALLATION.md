@@ -162,7 +162,76 @@ sudo docker compose -f docker-compose.gpu-web.yml build backend worker frontend
 sudo docker compose -f docker-compose.gpu-web.yml up
 ```
 
-## 3. Source Installation On Ubuntu
+## 3. Split CPU Web VM + GPU Model VM
+
+Use this deployment when the web application runs on a CPU VM and model
+inference runs on a separate GPU VM.
+
+On the GPU VM, complete the Docker installation steps above through:
+
+- building `screencastgen:gpu`
+- downloading model weights into the persistent Docker volumes
+- starting the GPU server with `docker-compose.gpu.yml`
+
+The GPU VM should expose the inference server only to the CPU VM:
+
+```bash
+sudo docker compose -f docker-compose.gpu.yml up --build
+```
+
+Check it locally on the GPU VM:
+
+```bash
+curl http://localhost:8100/health
+```
+
+From the CPU VM, verify that the GPU server is reachable over the private VM
+network:
+
+```bash
+curl http://GPU_PRIVATE_IP:8100/health
+```
+
+Keep port `8100` private. Prefer a VPC/private IP, firewall rule restricted to
+the CPU VM, or an SSH tunnel. Do not expose the GPU inference API publicly.
+
+On the CPU VM, run the web stack and point the backend and worker at the GPU VM.
+Create a small Compose override:
+
+```bash
+cd web
+
+cat > docker-compose.remote-gpu.override.yml <<'EOF'
+services:
+  backend:
+    environment:
+      P2A_TTS_SERVER_URL: http://GPU_PRIVATE_IP:8100
+  worker:
+    environment:
+      P2A_TTS_SERVER_URL: http://GPU_PRIVATE_IP:8100
+EOF
+```
+
+Start the CPU-side web stack:
+
+```bash
+sudo docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.remote-gpu.override.yml \
+  up --build
+```
+
+Open the UI from your machine:
+
+```text
+http://CPU_VM_PUBLIC_IP:5173
+```
+
+In this split setup, model weights live only on the GPU VM. The CPU VM runs
+PostgreSQL, Redis, the FastAPI backend, the Celery worker, and the frontend; it
+does not need Qwen, WhisperX, or LatentSync weights.
+
+## 4. Source Installation On Ubuntu
 
 Use this path when you want to run the project directly on the VM instead of
 inside Docker.
@@ -256,7 +325,7 @@ make frontend
 The frontend runs on `http://localhost:5173` and the backend runs on
 `http://localhost:8000`.
 
-## 4. Troubleshooting
+## 5. Troubleshooting
 
 If Docker cannot see the GPU, rerun:
 

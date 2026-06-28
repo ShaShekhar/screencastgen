@@ -8,16 +8,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # Install screencastgen package with the remote-client and web dependencies
-COPY pyproject.toml requirements.txt ./
-COPY screencastgen/ screencastgen/
-RUN pip install --no-cache-dir -e ".[client,web]"
-
-# Install web backend deps
+COPY pyproject.toml ./
 COPY web/backend/requirements.txt web/backend/requirements.txt
-RUN pip install --no-cache-dir -r web/backend/requirements.txt
+RUN python - <<'PY' > /tmp/screencastgen-web-requirements.txt
+import tomllib
+
+with open("pyproject.toml", "rb") as f:
+    project = tomllib.load(f)["project"]
+
+requirements = []
+requirements.extend(project.get("dependencies", []))
+optional = project.get("optional-dependencies", {})
+for extra in ("client", "web"):
+    requirements.extend(optional.get(extra, []))
+
+print("\n".join(dict.fromkeys(requirements)))
+PY
+RUN pip install --no-cache-dir \
+    -r /tmp/screencastgen-web-requirements.txt \
+    -r web/backend/requirements.txt
 
 # Copy web backend code
+COPY screencastgen/ screencastgen/
 COPY web/ web/
+RUN pip install --no-cache-dir --no-deps -e .
 
 # Create data directories
 RUN mkdir -p /data/uploads /data/outputs

@@ -9,7 +9,7 @@ from .config import settings
 from .database import async_engine
 from .logging_config import setup_logging
 from .models import Base
-from .routers import events, jobs, reader, uploads, voices
+from .routers import events, jobs, lipsync_presets, reader, uploads, voices
 
 setup_logging("backend")
 
@@ -40,6 +40,7 @@ app.include_router(uploads.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
 app.include_router(voices.router, prefix="/api")
+app.include_router(lipsync_presets.router, prefix="/api")
 app.include_router(reader.router, prefix="/api")
 
 

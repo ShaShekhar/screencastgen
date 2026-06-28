@@ -28,7 +28,8 @@ def _build_config(req: JobCreateRequest) -> dict:
         cfg = req.lipsync_config.model_dump()
         if cfg.get("ref_audio_file_id") is not None:
             cfg["ref_audio_file_id"] = str(cfg["ref_audio_file_id"])
-        cfg["ref_video_file_id"] = str(cfg["ref_video_file_id"])
+        if cfg.get("ref_video_file_id") is not None:
+            cfg["ref_video_file_id"] = str(cfg["ref_video_file_id"])
         return cfg
     elif req.pipeline_type == "visualization" and req.visualization_config:
         cfg = req.visualization_config.model_dump()
@@ -55,15 +56,27 @@ async def create_job(req: JobCreateRequest):
         ref_audio_id = None
         ref_video_id = None
         if req.pipeline_type == "lipsync" and req.lipsync_config:
-            ref_audio_id = req.lipsync_config.ref_audio_file_id
-            ref_video_id = req.lipsync_config.ref_video_file_id
-            refs = [(ref_video_id, "Reference video")]
-            if ref_audio_id:
-                refs.append((ref_audio_id, "Reference audio"))
-            for fid, label in refs:
-                f = await session.get(UploadedFile, fid)
-                if not f:
-                    raise HTTPException(404, f"{label} file not found")
+            if req.lipsync_config.preset_id:
+                from ..services.lipsync_presets import get_lipsync_preset
+
+                preset = get_lipsync_preset(req.lipsync_config.preset_id)
+                if not preset:
+                    raise HTTPException(404, "Lip-sync preset not found")
+                if not preset.exists:
+                    raise HTTPException(
+                        404,
+                        f"Lip-sync preset '{preset.id}' is missing its backing files",
+                    )
+            else:
+                ref_audio_id = req.lipsync_config.ref_audio_file_id
+                ref_video_id = req.lipsync_config.ref_video_file_id
+                refs = [(ref_video_id, "Reference video")]
+                if ref_audio_id:
+                    refs.append((ref_audio_id, "Reference audio"))
+                for fid, label in refs:
+                    f = await session.get(UploadedFile, fid)
+                    if not f:
+                        raise HTTPException(404, f"{label} file not found")
         elif req.pipeline_type == "highlight" and req.highlight_config:
             if req.highlight_config.ref_audio_file_id:
                 ref_audio_id = req.highlight_config.ref_audio_file_id

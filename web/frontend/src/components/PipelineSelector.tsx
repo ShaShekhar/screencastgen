@@ -8,24 +8,19 @@ interface Props {
 const PIPELINES: { type: PipelineType; title: string; desc: string }[] = [
   {
     type: "lipsync",
-    title: "Talking-Head Reader",
+    title: "Lip-Sync Video Reader",
     desc: "Synchronized document, narration, and lip-synced presenter",
   },
   {
     type: "highlight",
-    title: "Read-Along EPUB",
+    title: "Audio Reader",
     desc: "Secondary accessibility export with synchronized text and narration",
-  },
-  {
-    type: "visualization",
-    title: "Concept Visualization",
-    desc: "Prompt-driven math animation rendered as a standalone MP4",
   },
 ];
 
 export default function PipelineSelector({ selected, onChange }: Props) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {PIPELINES.map((p) => (
         <button
           key={p.type}

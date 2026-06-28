@@ -1,0 +1,13 @@
+{
+  "presets": [
+    {
+      "id": "default-presenter",
+      "name": "Default Presenter",
+      "language": "en-US",
+      "description": "Default bundled presenter.",
+      "video_file": "default-presenter.mp4",
+      "audio_file": "",
+      "ref_text": "Exact transcript of the speech in the presenter video."
+    }
+  ]
+}

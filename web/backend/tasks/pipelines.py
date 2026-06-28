@@ -203,12 +203,30 @@ def _build_lipsync_request(
     ref_text = cfg.get("ref_text")
     ref_audio = None
     ref_video_path = ""
-    if job.ref_audio_file_id:
+    preset_language = None
+
+    preset_id = cfg.get("preset_id")
+    if preset_id:
+        from ..services.lipsync_presets import get_lipsync_preset
+
+        preset = get_lipsync_preset(str(preset_id))
+        if not preset:
+            raise ValueError(f"Lip-sync preset '{preset_id}' was not found")
+        if not preset.video_exists:
+            raise ValueError(f"Lip-sync preset '{preset_id}' is missing its video file")
+        if preset.audio_file and not preset.audio_exists:
+            raise ValueError(f"Lip-sync preset '{preset_id}' is missing its audio file")
+        ref_video_path = preset.video_abs_path
+        ref_audio_path = preset.audio_abs_path if preset.audio_exists else ""
+        ref_text = ref_text or preset.ref_text
+        preset_language = preset.language
+    elif job.ref_audio_file_id:
         ref_audio = db_session.get(UploadedFile, job.ref_audio_file_id)
         if ref_audio:
             ref_audio_path = get_upload_abs_path(ref_audio.stored_path)
             ref_text = ref_text or ref_audio.ref_text
-    if job.ref_video_file_id:
+
+    if not preset_id and job.ref_video_file_id:
         ref_video = db_session.get(UploadedFile, job.ref_video_file_id)
         if ref_video:
             ref_video_path = get_upload_abs_path(ref_video.stored_path)
@@ -220,7 +238,7 @@ def _build_lipsync_request(
         ref_text = transcribe_upload(
             cfg.get("tts_server_url") or settings.TTS_SERVER_URL,
             ref_audio_path,
-            language=cfg.get("language", DEFAULT_LANGUAGE),
+            language=cfg.get("language") or preset_language or DEFAULT_LANGUAGE,
         )
         if not ref_text:
             raise ValueError("Could not transcribe reference audio")
@@ -234,7 +252,7 @@ def _build_lipsync_request(
         output_dir=output_dir,
         backend=cfg.get("backend", "remote"),
         voice=cfg.get("voice"),
-        language=cfg.get("language", DEFAULT_LANGUAGE),
+        language=cfg.get("language") or preset_language or DEFAULT_LANGUAGE,
         model=cfg.get("model"),
         tts_server_url=cfg.get("tts_server_url") or settings.TTS_SERVER_URL,
         tts_concurrency=int(cfg.get("tts_concurrency", settings.TTS_CONCURRENCY)),
