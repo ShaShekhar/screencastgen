@@ -76,6 +76,14 @@ class QwenTTS:
             dtype=dtype,
         )
 
+    def close(self) -> None:
+        """Unload the Qwen model and release cached CUDA memory."""
+        self._model = None
+        if self.device != "cpu":
+            from ...gpu_memory import release_torch_cuda_cache
+
+            release_torch_cuda_cache()
+
     def synthesize(self, text: str, output_path: str) -> None:
         """Synthesize *text* and write audio to *output_path*."""
         self._ensure_model()

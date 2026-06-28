@@ -47,7 +47,8 @@ _lipsync_provider_name: str = "auto"
 # Async lip-sync jobs: clients submit work, then poll. Generation runs in a
 # background thread so a slow GPU never holds an HTTP connection open (which
 # would otherwise trip the client's socket timeout). The GPU lock serialises
-# generation so concurrent submissions queue rather than racing for VRAM.
+# TTS, transcription, alignment, and lip-sync so model handoffs can release VRAM
+# before the next GPU-heavy phase starts.
 _lipsync_jobs: dict = {}
 _lipsync_jobs_lock = threading.Lock()
 _lipsync_gpu_lock = threading.Lock()
@@ -59,6 +60,20 @@ def _safe_unlink(path: Optional[str]) -> None:
             os.unlink(path)
         except OSError:
             pass
+
+
+def _release_tts_backend_for_gpu_phase(phase: str) -> None:
+    """Unload the TTS model so another GPU-heavy phase can use VRAM."""
+    backend = _backend
+    close = getattr(backend, "close", None)
+    if close is None:
+        return
+
+    try:
+        close()
+        print(f"Released TTS backend GPU memory before {phase}.")
+    except Exception as exc:  # noqa: BLE001 - lip-sync can still attempt to run
+        print(f"WARNING: could not release TTS backend GPU memory: {exc}", file=sys.stderr)
 
 
 def _run_lipsync_job(
@@ -86,6 +101,8 @@ def _run_lipsync_job(
                     return
                 entry["status"] = "running"
                 entry["started_at"] = time.monotonic()
+
+            _release_tts_backend_for_gpu_phase("lip-sync")
 
             fd_o, tmp_output = tempfile.mkstemp(suffix=".mp4")
             os.close(fd_o)
@@ -237,7 +254,14 @@ def _create_app():
             with open(tmp_audio, "wb") as f:
                 f.write(content)
 
-            text = transcribe_audio(tmp_audio, language=language, device=_device)
+            with _lipsync_gpu_lock:
+                _release_tts_backend_for_gpu_phase("transcription")
+                try:
+                    text = transcribe_audio(tmp_audio, language=language, device=_device)
+                finally:
+                    from .gpu_memory import release_torch_cuda_cache
+
+                    release_torch_cuda_cache()
             return {"text": text}
         finally:
             if os.path.exists(tmp_audio):
@@ -267,13 +291,20 @@ def _create_app():
             with open(tmp_audio, "wb") as f:
                 f.write(content)
 
-            words = align_chunk(
-                tmp_audio,
-                text,
-                provider=provider or _aligner_name,
-                language=language,
-                device=_device,
-            )
+            with _lipsync_gpu_lock:
+                _release_tts_backend_for_gpu_phase("alignment")
+                try:
+                    words = align_chunk(
+                        tmp_audio,
+                        text,
+                        provider=provider or _aligner_name,
+                        language=language,
+                        device=_device,
+                    )
+                finally:
+                    from .gpu_memory import release_torch_cuda_cache
+
+                    release_torch_cuda_cache()
 
             return {
                 "words": [
@@ -506,6 +537,7 @@ def main(argv=None):
         backend=_backend,
         max_batch=args.max_batch,
         batch_window_ms=args.batch_window_ms,
+        run_lock=_lipsync_gpu_lock,
     )
     _batcher.start()
 

@@ -75,10 +75,12 @@ class BatchingSynthesizer:
         backend: Any,
         max_batch: int = 8,
         batch_window_ms: int = 30,
+        run_lock: Optional[threading.Lock] = None,
     ):
         self._backend = backend
         self._max_batch = max(1, int(max_batch))
         self._window_s = max(0.0, float(batch_window_ms) / 1000.0)
+        self._run_lock = run_lock
 
         self._queue: Deque[_QueueItem] = deque()
         self._cv = threading.Condition()
@@ -197,12 +199,21 @@ class BatchingSynthesizer:
                 "clone" if ref_tmp_path else "custom",
                 language,
             )
-            audio_list = self._backend.synthesize_batch(
-                texts=texts,
-                language=language,
-                ref_audio_path=ref_tmp_path,
-                ref_text=ref_text,
-            )
+            if self._run_lock is None:
+                audio_list = self._backend.synthesize_batch(
+                    texts=texts,
+                    language=language,
+                    ref_audio_path=ref_tmp_path,
+                    ref_text=ref_text,
+                )
+            else:
+                with self._run_lock:
+                    audio_list = self._backend.synthesize_batch(
+                        texts=texts,
+                        language=language,
+                        ref_audio_path=ref_tmp_path,
+                        ref_text=ref_text,
+                    )
             logger.info(
                 "synthesize_batch: done size=%d elapsed=%.2fs",
                 len(batch),

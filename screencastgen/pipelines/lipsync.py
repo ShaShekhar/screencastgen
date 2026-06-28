@@ -36,6 +36,18 @@ from .types import LipsyncPipelineRequest, PipelineRunResult, coerce_request
 BackendFactory = Callable[[object, str], object]
 
 
+def _release_tts_backend(backend, reporter: PipelineReporter) -> None:
+    """Free a local TTS model before later GPU-heavy pipeline phases."""
+    close = getattr(backend, "close", None)
+    if close is None:
+        return
+    try:
+        close()
+        reporter.line("  Released TTS backend GPU memory.")
+    except Exception as exc:  # noqa: BLE001 - cleanup should not mask pipeline state
+        reporter.line(f"  Warning: could not release TTS backend GPU memory: {exc}")
+
+
 def run_lipsync_pipeline(
     request,
     *,
@@ -111,6 +123,7 @@ def run_lipsync_pipeline(
             reporter=reporter,
             concurrency=getattr(request, "tts_concurrency", 1),
         )
+        _release_tts_backend(backend, reporter)
         if has_failed_chunks(tracker):
             msg = "Lipsync pipeline failed: one or more chunks did not complete."
             print(msg, file=sys.stderr)

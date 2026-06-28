@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import zipfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 import pytest
@@ -487,6 +488,73 @@ class TestLipsyncPipelineIntegration:
             result = run_lipsync_pipeline(args)
 
         assert result == 0
+
+    def test_releases_tts_backend_before_alignment(self, sample_pdf_simple, tmp_path):
+        """Local lip-sync should unload TTS before later GPU-heavy phases."""
+        from screencastgen.pipelines.lipsync import run_lipsync_pipeline
+        from screencastgen.pipelines.types import PipelineRunResult
+        from screencastgen.types import AlignedChunk, WordTiming
+
+        ref_audio = str(tmp_path / "ref.wav")
+        _make_wav(ref_audio, duration_s=1.0)
+        ref_video = str(tmp_path / "face.mp4")
+        with open(ref_video, "wb") as f:
+            f.write(b"\x00" * 100)
+
+        args = make_lipsync_args(
+            sample_pdf_simple,
+            tmp_path,
+            ref_audio=ref_audio,
+            ref_video=ref_video,
+            backend="qwen",
+            format="reader",
+        )
+        audio_path = str(tmp_path / "chunk_001.wav")
+        order = []
+
+        class ReleasableBackend:
+            max_chunk_bytes = 1500
+            output_format = "wav"
+
+            def close(self):
+                order.append("close")
+
+        def fake_synthesize_chunks(*_args, **_kwargs):
+            order.append("synthesize")
+            with open(audio_path, "wb") as f:
+                f.write(b"audio")
+
+        def fake_align_chunks(*_args, **_kwargs):
+            order.append("align")
+            assert order == ["synthesize", "close", "align"]
+            return [
+                AlignedChunk(
+                    chunk_num=1,
+                    text="Hello.",
+                    audio_path=audio_path,
+                    words=[WordTiming("Hello", 0.0, 0.5)],
+                )
+            ]
+
+        with patch("screencastgen.pipelines.lipsync.extract_and_chunk_paged", return_value=(["Hello."], {1: [1]})), \
+             patch("screencastgen.pipelines.lipsync.validate_and_collect", return_value=[(1, "Hello.", "hash")]), \
+             patch("screencastgen.pipelines.lipsync.synthesize_chunks", side_effect=fake_synthesize_chunks), \
+             patch("screencastgen.pipelines.lipsync.has_failed_chunks", return_value=False), \
+             patch("screencastgen.pipelines.lipsync.align_chunks", side_effect=fake_align_chunks), \
+             patch("screencastgen.lipsync.generate_lipsync_video") as mock_lipsync, \
+             patch("screencastgen.pipelines.lipsync.build_lipsync_reader", return_value=PipelineRunResult(exit_code=0)):
+            def write_lipsync_output(*_args, **kwargs):
+                Path(kwargs["output_path"]).write_bytes(b"video")
+                return kwargs["output_path"]
+
+            mock_lipsync.side_effect = write_lipsync_output
+            result = run_lipsync_pipeline(
+                args,
+                backend_factory=lambda *_args, **_kwargs: ReleasableBackend(),
+            )
+
+        assert result.exit_code == 0
+        assert order == ["synthesize", "close", "align"]
 
     def test_lipsync_tracks_video_rendering(self, tmp_path):
         """Tracker should record rendered video chunks for resumability."""
