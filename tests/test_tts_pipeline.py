@@ -25,7 +25,7 @@ from screencastgen.constants import (
     MAX_TTS_BYTES,
     SENTENCE_WARN_BYTES,
 )
-from screencastgen.extractor import extract_text, extract_text_by_page
+from screencastgen.extractor import extract_text, extract_text_by_page, strip_markdown_formatting
 from screencastgen.text_processing import (
     _break_long_runs,
     _split_long_sentence,
@@ -68,6 +68,50 @@ class TestExtractText:
             assert isinstance(page_num, int)
             assert page_num >= 1
             assert isinstance(text, str)
+
+    def test_extract_markdown_strips_formatting(self, tmp_path):
+        md_path = tmp_path / "lesson.md"
+        md_path.write_text(
+            """---
+title: Ignore metadata
+---
+# Lesson Title
+
+Read the **important** [chapter](https://example.com) first.
+
+- One point
+- [x] Done item
+
+```python
+print("hello")
+```
+
+| Term | Meaning |
+| ---- | ------- |
+| TTS | text to speech |
+""",
+            encoding="utf-8",
+        )
+
+        text = extract_text(str(md_path))
+        assert "Lesson Title" in text
+        assert "important" in text
+        assert "chapter" in text
+        assert "One point" in text
+        assert "Done item" in text
+        assert 'print("hello")' in text
+        assert "https://example.com" not in text
+        assert "**" not in text
+        assert "# Lesson" not in text
+        assert "```" not in text
+        assert "| ----" not in text
+
+    def test_extract_markdown_by_page_returns_plain_single_page(self, tmp_path):
+        md_path = tmp_path / "notes.markdown"
+        md_path.write_text("# Heading\n\nPlain **body**.", encoding="utf-8")
+
+        pages = extract_text_by_page(str(md_path))
+        assert pages == [(1, "Heading\n\nPlain body.")]
 
     def test_extract_text_nonexistent_file(self, tmp_path):
         with pytest.raises(Exception):
@@ -148,6 +192,10 @@ class TestPreprocessText:
         text = "This is a normal sentence."
         result = preprocess_text(text)
         assert "This is a normal sentence." in result
+
+    def test_strip_markdown_formatting_keeps_readable_text(self):
+        result = strip_markdown_formatting("> Quote with `code` and *emphasis*.")
+        assert result == "Quote with code and emphasis."
 
 
 # ===================================================================
@@ -555,6 +603,26 @@ class TestAudioPipeline:
         assert isinstance(chunks, list)
         assert len(chunks) >= 1
         assert tracker.status["total_chunks"] == len(chunks)
+
+    def test_extract_and_chunk_markdown_uses_plain_text(self, tmp_path):
+        """Markdown input is stripped before TTS chunking."""
+        from screencastgen.cli import _extract_and_chunk
+
+        md_path = tmp_path / "slides.md"
+        md_path.write_text(
+            "# Talk\n\nNarrate **this** [section](https://example.com).\n",
+            encoding="utf-8",
+        )
+        args = make_audio_args(str(md_path), tmp_path)
+        tracker = ProcessingTracker(str(tmp_path / "processing_status.json"))
+        backend = MockTTSBackend()
+
+        chunks = _extract_and_chunk(args, tracker, max_chunk_bytes=backend.max_chunk_bytes)
+        text = " ".join(chunks)
+        assert "Talk" in text
+        assert "Narrate this section" in text
+        assert "**" not in text
+        assert "https://example.com" not in text
 
     def test_validate_and_collect(self, sample_pdf_simple, tmp_path):
         """Test validation of extracted chunks."""

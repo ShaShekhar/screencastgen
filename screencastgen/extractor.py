@@ -3,6 +3,7 @@
 Supports:
   * ``.pdf``  – via PyPDF2
   * ``.txt``  – plain UTF-8 text
+  * ``.md``   – Markdown converted to plain text
   * ``.epub`` – via the ``ebooklib`` package (optional dependency)
 
 PyMuPDF (fitz) functions are deferred-imported and only used for the
@@ -10,9 +11,14 @@ page-image rendering pipeline (word bounding boxes + page rasterisation).
 """
 
 import os
+import re
 from typing import List, Optional, Tuple
 
 import PyPDF2
+
+
+MARKDOWN_EXTENSIONS = {".md", ".markdown", ".mdown"}
+SUPPORTED_TEXT_EXTENSIONS = {".pdf", ".txt", ".epub", *MARKDOWN_EXTENSIONS}
 
 
 def _ext(path: str) -> str:
@@ -22,6 +28,55 @@ def _ext(path: str) -> str:
 def _read_text_file(path: str) -> str:
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         return fh.read()
+
+
+def read_markdown_source(path: str) -> Optional[str]:
+    """Return raw Markdown source for Markdown files, otherwise ``None``."""
+    if _ext(path) not in MARKDOWN_EXTENSIONS:
+        return None
+    return _read_text_file(path)
+
+
+def strip_markdown_formatting(markdown: str) -> str:
+    """Return readable plain text from Markdown without formatting markers."""
+    text = markdown.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Drop metadata and non-readable markup that should not be narrated.
+    text = re.sub(r"\A---\s*\n.*?\n---\s*(?:\n|$)", "", text, flags=re.DOTALL)
+    text = re.sub(r"<!--.*?-->", " ", text, flags=re.DOTALL)
+
+    # Preserve code content but remove fence/indent formatting.
+    text = re.sub(r"^[ \t]*(```+|~~~+)[^\n]*\n", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^[ \t]*(```+|~~~+)[ \t]*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"(?m)^(?: {4}|\t)(.+)$", r"\1", text)
+
+    # Links/images should narrate their human-readable text, not URLs.
+    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"\[([^\]]+)\]\[[^\]]*\]", r"\1", text)
+    text = re.sub(r"^\s{0,3}\[[^\]]+\]:\s+\S+.*$", " ", text, flags=re.MULTILINE)
+
+    # Strip block and inline syntax while keeping the words.
+    text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s{0,3}>\s?", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*[-+*]\s+\[[ xX]\]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*[-+*]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+[.)]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s{0,3}[-*_]{3,}\s*$", " ", text, flags=re.MULTILINE)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = re.sub(r"(\*\*|__)(.*?)\1", r"\2", text)
+    text = re.sub(r"\*(?!\s)(.*?)(?<!\s)\*", r"\1", text)
+    text = re.sub(r"(?<!\w)_(?!\s)(.*?)(?<!\s)_(?!\w)", r"\1", text)
+    text = re.sub(r"~~(.*?)~~", r"\1", text)
+
+    # Markdown table pipes/separators are formatting, not content.
+    text = re.sub(r"^\s*\|?[\s:|-]{3,}\|[\s:|.-]*$", " ", text, flags=re.MULTILINE)
+    text = re.sub(r"(?m)^\s*\|(.+)\|\s*$", lambda m: m.group(1).replace("|", " "), text)
+
+    # Remove raw HTML tags after markdown-specific handling.
+    text = re.sub(r"<[^>]+>", " ", text)
+
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def _read_epub(path: str) -> List[Tuple[int, str]]:
@@ -53,7 +108,7 @@ def _read_epub(path: str) -> List[Tuple[int, str]]:
 
 
 def extract_text(path: str) -> str:
-    """Read *path* (PDF, TXT, or EPUB) and return concatenated text."""
+    """Read *path* and return concatenated plain text."""
     ext = _ext(path)
     if ext == ".pdf":
         text = ""
@@ -64,18 +119,20 @@ def extract_text(path: str) -> str:
         return text
     if ext == ".txt":
         return _read_text_file(path)
+    if ext in MARKDOWN_EXTENSIONS:
+        return strip_markdown_formatting(_read_text_file(path))
     if ext == ".epub":
         return "\n".join(text for _, text in _read_epub(path))
     raise ValueError(
-        f"Unsupported file extension '{ext}'. Supported: .pdf, .txt, .epub"
+        f"Unsupported file extension '{ext}'. Supported: .pdf, .txt, .md, .epub"
     )
 
 
 def extract_text_by_page(path: str) -> List[Tuple[int, str]]:
     """Read *path* and return ``[(page_num, text), ...]`` (1-indexed).
 
-    For ``.txt`` files the entire content is returned as a single page.
-    For ``.epub`` files each document item becomes a page.
+    For ``.txt`` and Markdown files the entire content is returned as a
+    single page. For ``.epub`` files each document item becomes a page.
     """
     ext = _ext(path)
     if ext == ".pdf":
@@ -87,10 +144,12 @@ def extract_text_by_page(path: str) -> List[Tuple[int, str]]:
         return pages
     if ext == ".txt":
         return [(1, _read_text_file(path))]
+    if ext in MARKDOWN_EXTENSIONS:
+        return [(1, strip_markdown_formatting(_read_text_file(path)))]
     if ext == ".epub":
         return _read_epub(path)
     raise ValueError(
-        f"Unsupported file extension '{ext}'. Supported: .pdf, .txt, .epub"
+        f"Unsupported file extension '{ext}'. Supported: .pdf, .txt, .md, .epub"
     )
 
 

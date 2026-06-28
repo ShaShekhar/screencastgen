@@ -152,11 +152,18 @@ def build_reader_assets(
         )
 
     source_ext = os.path.splitext(pdf_path)[1].lower().lstrip(".") or "text"
+    try:
+        from .extractor import read_markdown_source
+
+        source_markdown = read_markdown_source(pdf_path)
+    except Exception:
+        source_markdown = None
     manifest = {
         "version": 1,
         "title": title,
         "language": language,
         "source_type": source_ext,
+        "source_markdown": source_markdown,
         "duration": round(total_duration, 3),
         "audio": AUDIO_NAME,
         "presenter": presenter,

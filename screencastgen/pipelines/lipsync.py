@@ -61,7 +61,7 @@ def run_lipsync_pipeline(
 
     gpu_url = gpu_server_url(request)
 
-    files_to_check = [(request.pdf, "PDF")]
+    files_to_check = [(request.pdf, "Document")]
     if getattr(request, "ref_audio", None):
         files_to_check.append((request.ref_audio, "Reference audio"))
     files_to_check.append((request.ref_video, "Reference video"))

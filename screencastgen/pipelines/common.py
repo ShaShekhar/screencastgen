@@ -49,7 +49,7 @@ def extract_and_chunk(args, tracker, max_chunk_bytes=MAX_CHUNK_BYTES, reporter: 
         reporter.line(f"Failed: {summary['failed']}")
         reporter.line(f"Remaining: {summary['remaining']}")
 
-    reporter.phase_start("extracting", "\nStep 1: Extracting text from PDF...")
+    reporter.phase_start("extracting", "\nStep 1: Extracting text from document...")
     raw_text = extract_text(pdf_path)
 
     reporter.phase_start("preprocessing", "Step 2: Preprocessing text...")
@@ -89,7 +89,7 @@ def extract_and_chunk_paged(
         reporter.line(f"Failed: {summary['failed']}")
         reporter.line(f"Remaining: {summary['remaining']}")
 
-    reporter.phase_start("extracting", "\nStep 1: Extracting text from PDF (page-aware)...")
+    reporter.phase_start("extracting", "\nStep 1: Extracting text from document (page-aware)...")
     pages = extract_text_by_page(pdf_path)
 
     reporter.phase_start("splitting", "Step 2-3: Preprocessing and splitting per page...")
@@ -353,7 +353,7 @@ def prepare_tracker(args) -> ProcessingTracker:
 
 
 def build_title(pdf_path: str) -> str:
-    """Convert a PDF filename into a human-readable title."""
+    """Convert a document filename into a human-readable title."""
     from pathlib import Path
 
     return Path(pdf_path).stem.replace("_", " ").replace("-", " ").title()

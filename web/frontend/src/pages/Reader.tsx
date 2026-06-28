@@ -2,6 +2,7 @@ import {
   ChangeEvent,
   CSSProperties,
   PointerEvent as ReactPointerEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -91,6 +92,251 @@ const ZONE_CURSOR: Record<PipZone, string> = {
   se: "nwse-resize",
   drag: "grab",
 };
+
+const MARKDOWN_SOURCE_TYPES = new Set(["md", "markdown", "mdown"]);
+
+function safeMarkdownHref(raw: string): string | undefined {
+  const href = raw.trim();
+  if (/^(https?:|mailto:|#)/i.test(href)) return href;
+  return undefined;
+}
+
+function renderMarkdownInline(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const tokenRe =
+    /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\[[^\]]+\]\([^)]+\)|\*[^*\s][^*]*[^*\s]\*)/g;
+  let last = 0;
+  let tokenIndex = 0;
+  for (const match of text.matchAll(tokenRe)) {
+    const token = match[0];
+    const index = match.index ?? 0;
+    if (index > last) nodes.push(text.slice(last, index));
+
+    const key = `${keyPrefix}-${tokenIndex++}`;
+    if (token.startsWith("`")) {
+      nodes.push(
+        <code key={key} className="rounded bg-[var(--reader-hover)] px-1 py-0.5 text-[0.85em]">
+          {token.slice(1, -1)}
+        </code>,
+      );
+    } else if (token.startsWith("**") || token.startsWith("__")) {
+      nodes.push(<strong key={key}>{token.slice(2, -2)}</strong>);
+    } else if (token.startsWith("~~")) {
+      nodes.push(<del key={key}>{token.slice(2, -2)}</del>);
+    } else if (token.startsWith("[")) {
+      const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      const href = link ? safeMarkdownHref(link[2]) : undefined;
+      nodes.push(
+        href ? (
+          <a
+            key={key}
+            href={href}
+            target={href.startsWith("#") ? undefined : "_blank"}
+            rel={href.startsWith("#") ? undefined : "noreferrer"}
+            className="underline decoration-[var(--reader-muted)] underline-offset-4 hover:text-blue-400"
+          >
+            {link?.[1]}
+          </a>
+        ) : (
+          link?.[1] ?? token
+        ),
+      );
+    } else {
+      nodes.push(<em key={key}>{token.slice(1, -1)}</em>);
+    }
+    last = index + token.length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
+function stripMarkdownFrontMatter(markdown: string): string {
+  return markdown
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/^---\s*\n[\s\S]*?\n---\s*(?:\n|$)/, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+}
+
+function isMarkdownBlockStart(line: string, nextLine?: string): boolean {
+  return (
+    /^#{1,6}\s+/.test(line) ||
+    /^>\s?/.test(line) ||
+    /^(\s*)([-+*]|\d+[.)])\s+/.test(line) ||
+    /^\s*(```+|~~~+)/.test(line) ||
+    /^\s{0,3}[-*_]{3,}\s*$/.test(line) ||
+    (line.includes("|") && !!nextLine && /^\s*\|?[\s:|-]{3,}\|[\s:|.-]*$/.test(nextLine))
+  );
+}
+
+function renderMarkdownDocument(markdown: string): ReactNode[] {
+  const lines = stripMarkdownFrontMatter(markdown).split("\n");
+  const blocks: ReactNode[] = [];
+  let i = 0;
+  let blockIndex = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) {
+      i += 1;
+      continue;
+    }
+
+    const fence = line.match(/^\s*(```+|~~~+)(.*)$/);
+    if (fence) {
+      const fenceMarker = fence[1];
+      i += 1;
+      const codeLines: string[] = [];
+      while (i < lines.length && !lines[i].trim().startsWith(fenceMarker)) {
+        codeLines.push(lines[i]);
+        i += 1;
+      }
+      if (i < lines.length) i += 1;
+      blocks.push(
+        <pre
+          key={`md-${blockIndex++}`}
+          className="mb-5 overflow-x-auto rounded-lg border border-[var(--reader-border)] bg-[var(--reader-surface)] p-4 text-sm leading-6"
+        >
+          <code>{codeLines.join("\n")}</code>
+        </pre>,
+      );
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const level = Math.min(heading[1].length, 4);
+      const Tag = `h${level}` as keyof JSX.IntrinsicElements;
+      const size =
+        level === 1
+          ? "text-3xl"
+          : level === 2
+            ? "text-2xl"
+            : level === 3
+              ? "text-xl"
+              : "text-lg";
+      blocks.push(
+        <Tag key={`md-${blockIndex++}`} className={`${size} mt-8 mb-4 font-semibold leading-tight`}>
+          {renderMarkdownInline(heading[2], `h-${blockIndex}`)}
+        </Tag>,
+      );
+      i += 1;
+      continue;
+    }
+
+    if (/^\s{0,3}[-*_]{3,}\s*$/.test(line)) {
+      blocks.push(
+        <hr key={`md-${blockIndex++}`} className="my-8 border-[var(--reader-border)]" />,
+      );
+      i += 1;
+      continue;
+    }
+
+    if (line.includes("|") && i + 1 < lines.length && /^\s*\|?[\s:|-]{3,}\|[\s:|.-]*$/.test(lines[i + 1])) {
+      const tableLines = [line];
+      i += 2;
+      while (i < lines.length && lines[i].includes("|") && lines[i].trim()) {
+        tableLines.push(lines[i]);
+        i += 1;
+      }
+      const rows = tableLines.map((row) =>
+        row
+          .trim()
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((cell) => cell.trim()),
+      );
+      const [head, ...body] = rows;
+      blocks.push(
+        <div key={`md-${blockIndex++}`} className="mb-5 overflow-x-auto">
+          <table className="w-full border-collapse text-base">
+            <thead>
+              <tr>
+                {head.map((cell, idx) => (
+                  <th key={idx} className="border border-[var(--reader-border)] px-3 py-2 text-left font-semibold">
+                    {renderMarkdownInline(cell, `th-${blockIndex}-${idx}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {body.map((row, rowIdx) => (
+                <tr key={rowIdx}>
+                  {row.map((cell, cellIdx) => (
+                    <td key={cellIdx} className="border border-[var(--reader-border)] px-3 py-2">
+                      {renderMarkdownInline(cell, `td-${blockIndex}-${rowIdx}-${cellIdx}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      continue;
+    }
+
+    const listMatch = line.match(/^(\s*)([-+*]|\d+[.)])\s+(.+)$/);
+    if (listMatch) {
+      const ordered = /\d/.test(listMatch[2]);
+      const items: string[] = [];
+      while (i < lines.length) {
+        const item = lines[i].match(/^(\s*)([-+*]|\d+[.)])\s+(.+)$/);
+        if (!item || /\d/.test(item[2]) !== ordered) break;
+        items.push(item[3].replace(/^\[[ xX]\]\s+/, ""));
+        i += 1;
+      }
+      const ListTag = ordered ? "ol" : "ul";
+      blocks.push(
+        <ListTag
+          key={`md-${blockIndex++}`}
+          className={`mb-5 pl-6 ${ordered ? "list-decimal" : "list-disc"} space-y-2`}
+        >
+          {items.map((item, idx) => (
+            <li key={idx}>{renderMarkdownInline(item, `li-${blockIndex}-${idx}`)}</li>
+          ))}
+        </ListTag>,
+      );
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      const quoteLines: string[] = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) {
+        quoteLines.push(lines[i].replace(/^>\s?/, ""));
+        i += 1;
+      }
+      blocks.push(
+        <blockquote
+          key={`md-${blockIndex++}`}
+          className="mb-5 border-l-4 border-[var(--reader-border)] pl-4 text-[var(--reader-muted)]"
+        >
+          {renderMarkdownInline(quoteLines.join(" "), `q-${blockIndex}`)}
+        </blockquote>,
+      );
+      continue;
+    }
+
+    const paragraph: string[] = [line.trim()];
+    i += 1;
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !isMarkdownBlockStart(lines[i], lines[i + 1])
+    ) {
+      paragraph.push(lines[i].trim());
+      i += 1;
+    }
+    blocks.push(
+      <p key={`md-${blockIndex++}`} className="mb-5">
+        {renderMarkdownInline(paragraph.join(" "), `p-${blockIndex}`)}
+      </p>,
+    );
+  }
+
+  return blocks;
+}
 
 /** Classify a pointer position over the PiP as a resize edge or a drag. */
 function pipZoneAt(el: HTMLElement, clientX: number, clientY: number): PipZone {
@@ -360,6 +606,16 @@ export default function Reader() {
       url: getReaderPageUrl(id, filename),
     };
   }, [activePage, id, manifest]);
+
+  const markdownBlocks = useMemo(() => {
+    if (
+      !manifest?.source_markdown ||
+      !MARKDOWN_SOURCE_TYPES.has(manifest.source_type.toLowerCase())
+    ) {
+      return null;
+    }
+    return renderMarkdownDocument(manifest.source_markdown);
+  }, [manifest]);
 
   const handleTimeUpdate = useCallback(() => {
     const el = mediaRef.current;
@@ -788,42 +1044,46 @@ export default function Reader() {
             onWheel={cancelAutoScroll}
             onTouchMove={cancelAutoScroll}
           >
-            {pages.map(({ page, chunks }) => (
-              <section key={page} className="mb-10">
-                {page > 0 && (
-                  <div className="text-xs uppercase tracking-wider text-[var(--reader-muted)] mb-3">
-                    Page {page}
-                  </div>
-                )}
-                {chunks.map((chunk) => (
-                  <p key={chunk.chunk_num} className="mb-5">
-                    {chunk.words.length === 0 ? (
-                      <span>{chunk.text}</span>
-                    ) : (
-                      chunk.words.map((w) => {
-                        const idx = wordCounter++;
-                        const isActive = idx === activeIdx;
-                        return (
-                          <span
-                            key={idx}
-                            data-w={idx}
-                            onClick={() => seekToWord(idx)}
-                            className={
-                              "cursor-pointer transition-colors rounded px-0.5 " +
-                              (isActive
-                                ? "bg-[var(--reader-highlight-bg)] text-[var(--reader-highlight-fg)]"
-                                : "hover:bg-[var(--reader-hover)]")
-                            }
-                          >
-                            {w.word}{" "}
-                          </span>
-                        );
-                      })
-                    )}
-                  </p>
-                ))}
-              </section>
-            ))}
+            {markdownBlocks ? (
+              <section className="markdown-source">{markdownBlocks}</section>
+            ) : (
+              pages.map(({ page, chunks }) => (
+                <section key={page} className="mb-10">
+                  {page > 0 && (
+                    <div className="text-xs uppercase tracking-wider text-[var(--reader-muted)] mb-3">
+                      Page {page}
+                    </div>
+                  )}
+                  {chunks.map((chunk) => (
+                    <p key={chunk.chunk_num} className="mb-5">
+                      {chunk.words.length === 0 ? (
+                        <span>{chunk.text}</span>
+                      ) : (
+                        chunk.words.map((w) => {
+                          const idx = wordCounter++;
+                          const isActive = idx === activeIdx;
+                          return (
+                            <span
+                              key={idx}
+                              data-w={idx}
+                              onClick={() => seekToWord(idx)}
+                              className={
+                                "cursor-pointer transition-colors rounded px-0.5 " +
+                                (isActive
+                                  ? "bg-[var(--reader-highlight-bg)] text-[var(--reader-highlight-fg)]"
+                                  : "hover:bg-[var(--reader-hover)]")
+                              }
+                            >
+                              {w.word}{" "}
+                            </span>
+                          );
+                        })
+                      )}
+                    </p>
+                  ))}
+                </section>
+              ))
+            )}
           </article>
         </div>
       </main>

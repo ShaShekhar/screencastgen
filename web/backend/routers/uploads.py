@@ -19,6 +19,9 @@ router = APIRouter(tags=["uploads"])
 PREVIEW_EXTENSIONS = {
     ".pdf",
     ".txt",
+    ".md",
+    ".markdown",
+    ".mdown",
     ".epub",
     ".mp4",
     ".mov",
@@ -89,7 +92,7 @@ async def preview_upload(file_id: uuid.UUID):
     if ext not in PREVIEW_EXTENSIONS and not uploaded.content_type.startswith("video/"):
         raise HTTPException(
             400,
-            "Preview is only available for PDF, TXT, EPUB, and video uploads",
+            "Preview is only available for PDF, TXT, Markdown, EPUB, and video uploads",
         )
 
     try:

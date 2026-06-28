@@ -658,6 +658,36 @@ class TestLipsyncReaderBundle:
         with open(highlight_manifest, "r", encoding="utf-8") as fh:
             assert json.load(fh)["presenter"] is None
 
+    def test_reader_assets_preserve_markdown_display_source(
+        self, sample_aligned_chunks, tmp_path
+    ):
+        """Markdown jobs keep raw Markdown for display while chunks stay plain."""
+        import json
+
+        pytest.importorskip("pydub", reason="pydub required for reader audio")
+        from screencastgen.reader_assets import build_reader_assets
+
+        md_path = tmp_path / "lesson.md"
+        md_path.write_text("# Lesson\n\nNarrate **this**.", encoding="utf-8")
+        out = str(tmp_path / "reader")
+        os.makedirs(out, exist_ok=True)
+
+        try:
+            manifest_path = build_reader_assets(
+                aligned_chunks=sample_aligned_chunks,
+                output_dir=out,
+                pdf_path=str(md_path),
+                title="Lesson",
+            )
+        except Exception as exc:  # noqa: BLE001
+            pytest.skip(f"reader asset build needs ffmpeg/pydub: {exc}")
+
+        with open(manifest_path, "r", encoding="utf-8") as fh:
+            manifest = json.load(fh)
+        assert manifest["source_type"] == "md"
+        assert manifest["source_markdown"] == "# Lesson\n\nNarrate **this**."
+        assert manifest["chunks"][0]["text"] == sample_aligned_chunks[0].text
+
     def test_reader_format_dispatches_to_build_lipsync_reader(
         self, sample_pdf_simple, tmp_path
     ):

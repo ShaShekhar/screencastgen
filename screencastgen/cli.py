@@ -35,7 +35,7 @@ from .pipelines.visualization import run_visualization_pipeline as _run_visualiz
 
 def _add_common_args(p: argparse.ArgumentParser) -> None:
     """Add arguments shared by all subcommands."""
-    p.add_argument("pdf", help="Path to the input PDF file")
+    p.add_argument("pdf", help="Path to the input document file (PDF, TXT, Markdown, or EPUB)")
     p.add_argument(
         "--output-dir",
         default=DEFAULT_OUTPUT_DIR,

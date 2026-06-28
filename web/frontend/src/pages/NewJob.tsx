@@ -93,8 +93,8 @@ export default function NewJob() {
           1. Upload Document
         </h2>
         <FileUploader
-          accept=".pdf,.txt"
-          label="Upload a PDF or TXT file"
+          accept=".pdf,.txt,.md,.markdown,.mdown"
+          label="Upload a PDF, TXT, or Markdown file"
           onUploaded={setUploadedFile}
           showPreview
         />
