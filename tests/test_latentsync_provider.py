@@ -12,6 +12,7 @@ from screencastgen.providers.lipsync.latentsync_provider import (
     LatentSyncSession,
     _SESSIONS,
     _close_all_sessions,
+    _get_inference_timeout_seconds,
     close_idle_latentsync_sessions,
     download_latentsync_checkpoints,
     find_latentsync_python,
@@ -193,3 +194,9 @@ def test_close_idle_latentsync_sessions_closes_cached_worker(tmp_path):
     assert fake_process.poll() == 0
     shutdown = json.loads(fake_process.stdin.writes[-1])
     assert shutdown == {"cmd": "shutdown"}
+
+
+def test_latentsync_inference_timeout_uses_env(monkeypatch):
+    monkeypatch.setenv("LATENTSYNC_INFERENCE_TIMEOUT_SECONDS", "1800")
+
+    assert _get_inference_timeout_seconds() == 1800

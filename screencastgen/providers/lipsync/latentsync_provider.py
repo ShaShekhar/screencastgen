@@ -32,7 +32,7 @@ class LatentSyncPreset:
 # Default timeout (seconds) for waiting on a worker response.  Startup loads
 # models onto GPU so it gets a longer window; inference is per-chunk.
 _STARTUP_TIMEOUT = 300  # 5 minutes — model loading can be slow
-_INFERENCE_TIMEOUT = 600  # 10 minutes — long clips on slow GPUs
+_DEFAULT_INFERENCE_TIMEOUT_SECONDS = 1800  # 30 minutes — quality preset can be slow on L4 GPUs
 _DEFAULT_IDLE_TIMEOUT_SECONDS = 60.0
 
 
@@ -394,7 +394,10 @@ class LatentSyncSession:
                 process.stdin.write(json.dumps(request) + "\n")
                 process.stdin.flush()
 
-                message = self._read_message(context="inference", timeout=_INFERENCE_TIMEOUT)
+                message = self._read_message(
+                    context="inference",
+                    timeout=_get_inference_timeout_seconds(),
+                )
                 if not message.get("ok"):
                     raise RuntimeError(message.get("error", "LatentSync worker failed"))
         finally:
@@ -440,6 +443,30 @@ def _get_idle_timeout_seconds() -> float | None:
         return _DEFAULT_IDLE_TIMEOUT_SECONDS
     if timeout <= 0:
         return None
+    return timeout
+
+
+def _get_inference_timeout_seconds() -> int:
+    raw = os.environ.get("LATENTSYNC_INFERENCE_TIMEOUT_SECONDS")
+    if raw is None:
+        return _DEFAULT_INFERENCE_TIMEOUT_SECONDS
+
+    try:
+        timeout = int(raw.strip())
+    except ValueError:
+        logger.warning(
+            "Ignoring invalid LATENTSYNC_INFERENCE_TIMEOUT_SECONDS=%r; using %ss",
+            raw,
+            _DEFAULT_INFERENCE_TIMEOUT_SECONDS,
+        )
+        return _DEFAULT_INFERENCE_TIMEOUT_SECONDS
+    if timeout <= 0:
+        logger.warning(
+            "Ignoring non-positive LATENTSYNC_INFERENCE_TIMEOUT_SECONDS=%r; using %ss",
+            raw,
+            _DEFAULT_INFERENCE_TIMEOUT_SECONDS,
+        )
+        return _DEFAULT_INFERENCE_TIMEOUT_SECONDS
     return timeout
 
 
