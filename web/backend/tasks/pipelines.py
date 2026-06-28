@@ -8,6 +8,7 @@ import subprocess
 import sys
 import traceback
 import uuid
+from hashlib import sha1
 from typing import Optional
 
 from screencastgen.aligner import get_default_alignment_provider
@@ -39,6 +40,9 @@ from ..services.storage import get_upload_abs_path, get_output_dir, upload_outpu
 from ..services.transcribe_client import transcribe_upload
 
 logger = logging.getLogger(__name__)
+
+REFERENCE_VIDEO_AUDIO_SECONDS = 8
+REFERENCE_AUDIO_EXTRACT_TIMEOUT_SECONDS = 60
 
 
 def _upload_reader_assets(job_id: uuid.UUID, output_dir: str) -> None:
@@ -204,6 +208,7 @@ def _build_lipsync_request(
     ref_audio_path = ""
     ref_text = cfg.get("ref_text")
     ref_audio = None
+    ref_video = None
     ref_video_path = ""
     preset_language = None
 
@@ -232,6 +237,7 @@ def _build_lipsync_request(
         ref_video = db_session.get(UploadedFile, job.ref_video_file_id)
         if ref_video:
             ref_video_path = get_upload_abs_path(ref_video.stored_path)
+            ref_text = ref_text or ref_video.ref_text
 
     if not ref_audio_path and ref_video_path:
         ref_audio_path = _extract_reference_audio_from_video(ref_video_path, output_dir)
@@ -246,6 +252,8 @@ def _build_lipsync_request(
             raise ValueError("Could not transcribe reference audio")
         if ref_audio:
             ref_audio.ref_text = ref_text
+        elif ref_video:
+            ref_video.ref_text = ref_text
 
     return LipsyncPipelineRequest(
         pdf=pdf_path,
@@ -280,25 +288,44 @@ def _build_lipsync_request(
 def _extract_reference_audio_from_video(video_path: str, output_dir: str) -> str:
     """Extract a short mono WAV from a reference video for voice cloning."""
     os.makedirs(output_dir, exist_ok=True)
-    audio_path = os.path.join(output_dir, "reference_video_audio.wav")
+    audio_path = _reference_audio_path_for_video(video_path, output_dir)
     if os.path.isfile(audio_path) and os.path.getsize(audio_path) > 0:
         return audio_path
 
     cmd = [
         "ffmpeg",
+        "-nostdin",
         "-y",
         "-i",
         video_path,
+        "-map",
+        "0:a:0",
         "-vn",
         "-ac",
         "1",
         "-ar",
         "16000",
         "-t",
-        "30",
+        str(REFERENCE_VIDEO_AUDIO_SECONDS),
         audio_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    logger.info(
+        "Extracting %ss reference audio from presenter video: %s",
+        REFERENCE_VIDEO_AUDIO_SECONDS,
+        video_path,
+    )
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=REFERENCE_AUDIO_EXTRACT_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError(
+            "Timed out extracting reference audio from video. Upload a shorter "
+            "presenter clip or a reference audio override."
+        ) from exc
     if result.returncode != 0 or not os.path.isfile(audio_path) or os.path.getsize(audio_path) == 0:
         detail = (result.stderr or result.stdout or "").strip()
         msg = "Reference video does not contain usable audio. Upload a reference audio override."
@@ -306,6 +333,17 @@ def _extract_reference_audio_from_video(video_path: str, output_dir: str) -> str
             logger.warning("Reference audio extraction failed: %s", detail[-1000:])
         raise ValueError(msg)
     return audio_path
+
+
+def _reference_audio_path_for_video(video_path: str, output_dir: str) -> str:
+    """Return a stable extracted-audio path scoped to the source video."""
+    try:
+        stat = os.stat(video_path)
+        fingerprint = f"{os.path.abspath(video_path)}:{stat.st_mtime_ns}:{stat.st_size}"
+    except OSError:
+        fingerprint = os.path.abspath(video_path)
+    digest = sha1(fingerprint.encode("utf-8")).hexdigest()[:12]
+    return os.path.join(output_dir, f"reference_video_audio_{digest}.wav")
 
 
 def _build_visualization_request(job: Job, output_dir: str) -> VisualizationPipelineRequest:
