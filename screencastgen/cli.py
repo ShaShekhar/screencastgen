@@ -76,6 +76,12 @@ def _add_tts_backend_args(p: argparse.ArgumentParser) -> None:
         help="Number of chunks to synthesize in parallel (default: 1). "
         "Raise this with --backend remote when the server has a pool of workers.",
     )
+    p.add_argument(
+        "--tts-timeout",
+        type=int,
+        default=300,
+        help="Socket timeout in seconds for remote TTS synthesis requests (default: 300).",
+    )
     register_backend_args(p, context="cli")
 
 

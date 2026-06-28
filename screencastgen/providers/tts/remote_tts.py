@@ -69,6 +69,7 @@ class RemoteTTS:
         """Send *text* to the inference server and save the audio to *output_path*."""
         import json
         import os
+        import time
         import urllib.request
 
         url = f"{self.server_url}/synthesize"
@@ -128,11 +129,16 @@ class RemoteTTS:
                 method="POST",
             )
 
+        started = time.monotonic()
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 audio_bytes = resp.read()
         except Exception as exc:
-            raise RuntimeError(f"TTS server request failed ({self.server_url}): {exc}") from exc
+            elapsed = time.monotonic() - started
+            raise RuntimeError(
+                f"TTS server request failed ({self.server_url}) after {elapsed:.1f}s "
+                f"(timeout={self.timeout}s): {exc}"
+            ) from exc
 
         if not audio_bytes:
             raise RuntimeError("TTS server returned empty audio")
@@ -145,6 +151,7 @@ def _build_kwargs(args, invocation: str):
     return {
         "server_url": getattr(args, "tts_server_url", "http://localhost:8100"),
         "language": getattr(args, "language", "en-US"),
+        "timeout": getattr(args, "tts_timeout", 300),
         "ref_audio_path": getattr(args, "ref_audio", None),
         "ref_text": getattr(args, "ref_text", None),
     }

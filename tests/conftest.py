@@ -247,6 +247,8 @@ def make_audio_args(pdf_path, output_dir, **overrides):
         ref_audio=None,
         ref_text=None,
         tts_server_url="http://localhost:8100",
+        tts_timeout=300,
+        tts_concurrency=1,
         no_concat=False,
     )
     defaults.update(overrides)
@@ -271,6 +273,8 @@ def make_highlight_args(pdf_path, output_dir, **overrides):
         ref_audio=None,
         ref_text=None,
         tts_server_url="http://localhost:8100",
+        tts_timeout=300,
+        tts_concurrency=1,
         format="mp4",
         font_size=32,
         resolution="1280x720",
@@ -299,6 +303,8 @@ def make_lipsync_args(pdf_path, output_dir, ref_audio, ref_video, **overrides):
         ref_text=None,
         ref_video=ref_video,
         tts_server_url="http://localhost:8100",
+        tts_timeout=300,
+        tts_concurrency=1,
         format="mp4",
         font_size=32,
         resolution="1280x720",

@@ -12,11 +12,12 @@ import json
 import os
 import re
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from screencastgen.providers.tts import BACKEND_NAMES, create_backend
+from screencastgen.providers.tts import BACKEND_NAMES, create_backend, create_backend_from_args
 from screencastgen.concatenator import _find_chunk_files, concatenate
 from screencastgen.constants import (
     LONG_SENTENCE_THRESHOLD,
@@ -488,6 +489,28 @@ class TestBackendRegistry:
         mock_cls.return_value = MagicMock()
         backend = create_backend("remote", server_url="http://test:8100")
         mock_cls.assert_called_once()
+
+    @patch("screencastgen.providers.tts.remote_tts.RemoteTTS")
+    def test_remote_backend_args_include_timeout(self, mock_cls):
+        mock_cls.return_value = MagicMock()
+        args = SimpleNamespace(
+            backend="remote",
+            tts_server_url="http://test:8100",
+            language="en-US",
+            tts_timeout=1800,
+            ref_audio=None,
+            ref_text=None,
+        )
+
+        create_backend_from_args(args, invocation="audio")
+
+        mock_cls.assert_called_once_with(
+            server_url="http://test:8100",
+            language="en-US",
+            timeout=1800,
+            ref_audio_path=None,
+            ref_text=None,
+        )
 
 
 # ===================================================================

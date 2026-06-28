@@ -40,6 +40,7 @@ class TTSRequest(BasePipelineRequest):
     ref_audio: Optional[str] = None
     ref_text: Optional[str] = None
     tts_server_url: Optional[str] = None
+    tts_timeout: int = 300
     aligner: str = "whisperx"
     tts_concurrency: int = 1
 
