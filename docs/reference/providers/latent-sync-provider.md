@@ -8,7 +8,7 @@
 
 ## Overview
 
-Generates lip-synced face videos by running LatentSync in a subprocess. Supports multiple quality presets and manages session caching for performance.
+Generates lip-synced face videos by running LatentSync in a subprocess. Supports quality presets and manages session caching for performance.
 
 ---
 
@@ -19,7 +19,6 @@ Generates lip-synced face videos by running LatentSync in a subprocess. Supports
 | Preset | Resolution | Description |
 |--------|-----------|-------------|
 | `small` | 256px | Fast, suitable for small face overlays |
-| `balanced_256` | 256px | Refined 256px path using guidance 1.5 and 30 inference steps |
 | `quality` | 512px | High quality, larger face overlays |
 
 Each preset specifies:

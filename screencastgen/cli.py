@@ -79,8 +79,8 @@ def _add_tts_backend_args(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--tts-timeout",
         type=int,
-        default=300,
-        help="Socket timeout in seconds for remote TTS synthesis requests (default: 300).",
+        default=43200,
+        help="Socket timeout in seconds for remote TTS synthesis requests (default: 43200).",
     )
     register_backend_args(p, context="cli")
 
@@ -234,10 +234,10 @@ def _build_parser() -> argparse.ArgumentParser:
     ls_p.add_argument(
         "--latentsync-preset",
         default="quality",
-        choices=["small", "balanced_256", "quality"],
+        choices=["small", "quality"],
         help=(
-            "LatentSync preset: small (256 fast), balanced_256 "
-            "(256, guidance 1.5, 30 steps), or quality (512) (default: quality)"
+            "LatentSync preset: small (256 fast) or quality "
+            "(512 high quality, default)"
         ),
     )
 

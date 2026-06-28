@@ -25,7 +25,6 @@ export const FACE_POSITIONS = [
 ];
 const LATENTSYNC_PRESETS = [
   { value: "small", label: "256 Fast" },
-  { value: "balanced_256", label: "256 Balanced" },
   { value: "quality", label: "512 High Quality" },
 ];
 
@@ -334,7 +333,7 @@ export default function LipsyncSettings({ config, onChange }: Props) {
           ))}
         </select>
         <p className="mt-1 text-xs text-gray-500">
-          256 Balanced uses guidance 1.5 and 30 inference steps. 512 High Quality uses the 512 pipeline.
+          512 High Quality uses the 512 pipeline and is the default for sharper lip detail.
         </p>
       </div>
 

@@ -49,7 +49,7 @@ services:
       LATENTSYNC_ROOT: /opt/latentsync
       LATENTSYNC_PYTHON: /opt/latentsync-env/bin/python
       LATENTSYNC_IDLE_TIMEOUT_SECONDS: ${LATENTSYNC_IDLE_TIMEOUT_SECONDS:-30}
-      LATENTSYNC_INFERENCE_TIMEOUT_SECONDS: ${LATENTSYNC_INFERENCE_TIMEOUT_SECONDS:-1800}
+      LATENTSYNC_INFERENCE_TIMEOUT_SECONDS: ${LATENTSYNC_INFERENCE_TIMEOUT_SECONDS:-43200}
     volumes:
       - screencastgen-hf:/root/.cache/huggingface
       - screencastgen-torch:/root/.cache/torch
@@ -74,6 +74,7 @@ services:
       P2A_UPLOAD_DIR: /data/uploads
       P2A_OUTPUT_DIR: /data/outputs
       P2A_TTS_SERVER_URL: http://gpu-server:8100
+      P2A_TTS_TIMEOUT: ${P2A_TTS_TIMEOUT:-43200}
       P2A_ALLOWED_ORIGINS: ${P2A_ALLOWED_ORIGINS:-["http://localhost:5173"]}
     volumes:
       - screencastgen-appdata:/data
@@ -95,6 +96,7 @@ services:
       P2A_UPLOAD_DIR: /data/uploads
       P2A_OUTPUT_DIR: /data/outputs
       P2A_TTS_SERVER_URL: http://gpu-server:8100
+      P2A_TTS_TIMEOUT: ${P2A_TTS_TIMEOUT:-43200}
     volumes:
       - screencastgen-appdata:/data
     depends_on:

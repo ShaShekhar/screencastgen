@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     # The server batches concurrent requests into one GPU forward pass, so raising
     # this is what fills the server's --max-batch and lifts GPU utilization.
     TTS_CONCURRENCY: int = 8
-    # Some Qwen3-TTS voice-clone requests can exceed 5 minutes on an L4 when the
-    # text chunk is large or the effective batch size is one.
-    TTS_TIMEOUT: int = 1800
+    # Allow long GPU runs. This is a per-request timeout; full Celery jobs may
+    # run longer because document processing is chunked.
+    TTS_TIMEOUT: int = 43200
     ALLOWED_ORIGINS: list[str] = ["http://localhost:5173"]
 
     # Storage backend: "local" (default), "gcs", or "s3"

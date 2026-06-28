@@ -40,6 +40,7 @@ services:
       P2A_UPLOAD_DIR: /data/uploads
       P2A_OUTPUT_DIR: /data/outputs
       P2A_ALLOWED_ORIGINS: '["http://localhost:5173","http://localhost:3000"]'
+      P2A_TTS_TIMEOUT: ${P2A_TTS_TIMEOUT:-43200}
     volumes:
       - appdata:/data
     depends_on:
@@ -59,6 +60,7 @@ services:
       P2A_REDIS_URL: redis://redis:6379/0
       P2A_UPLOAD_DIR: /data/uploads
       P2A_OUTPUT_DIR: /data/outputs
+      P2A_TTS_TIMEOUT: ${P2A_TTS_TIMEOUT:-43200}
     volumes:
       - appdata:/data
     depends_on:

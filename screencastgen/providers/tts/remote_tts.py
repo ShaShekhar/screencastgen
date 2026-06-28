@@ -15,7 +15,7 @@ class RemoteTTS:
         self,
         server_url: str = "http://localhost:8100",
         language: str = "en-US",
-        timeout: int = 300,
+        timeout: int = 43200,
         ref_audio_path: Optional[str] = None,
         ref_text: Optional[str] = None,
     ):
@@ -151,7 +151,7 @@ def _build_kwargs(args, invocation: str):
     return {
         "server_url": getattr(args, "tts_server_url", "http://localhost:8100"),
         "language": getattr(args, "language", "en-US"),
-        "timeout": getattr(args, "tts_timeout", 300),
+        "timeout": getattr(args, "tts_timeout", 43200),
         "ref_audio_path": getattr(args, "ref_audio", None),
         "ref_text": getattr(args, "ref_text", None),
     }

@@ -163,34 +163,6 @@ def test_latentsync_session_sends_json_requests(tmp_path):
     }
 
 
-def test_balanced_256_preset_uses_refined_256_parameters(tmp_path):
-    root = _make_latentsync_root(tmp_path / "LatentSync")
-    python_path = _make_executable(tmp_path / "python")
-    config_path = tmp_path / "stage2_256.yaml"
-    config_path.write_text("dummy", encoding="utf-8")
-    checkpoint_path = tmp_path / "latentsync_unet.pt"
-    checkpoint_path.write_text("dummy", encoding="utf-8")
-
-    spec = LatentSyncRuntimeSpec(
-        root=root,
-        python_executable=python_path,
-        device="cuda",
-        preset=PRESETS["balanced_256"],
-        config_path=str(config_path),
-        checkpoint_path=str(checkpoint_path),
-        temp_dir=str(tmp_path / "temp"),
-    )
-
-    session = object.__new__(LatentSyncSession)
-    session.spec = spec
-    command = session._command()
-
-    assert "--inference-steps" in command
-    assert command[command.index("--inference-steps") + 1] == "30"
-    assert "--guidance-scale" in command
-    assert command[command.index("--guidance-scale") + 1] == "1.5"
-
-
 def test_256_presets_prefer_explicit_256_config(tmp_path):
     root = _make_latentsync_root(tmp_path / "LatentSync")
     config_dir = tmp_path / "LatentSync" / "configs" / "unet"
@@ -201,7 +173,6 @@ def test_256_presets_prefer_explicit_256_config(tmp_path):
     stage2_256.write_text("explicit", encoding="utf-8")
 
     assert _resolve_config_path(root, PRESETS["small"]) == str(stage2_256)
-    assert _resolve_config_path(root, PRESETS["balanced_256"]) == str(stage2_256)
 
 
 def test_close_idle_latentsync_sessions_closes_cached_worker(tmp_path):
@@ -242,3 +213,9 @@ def test_latentsync_inference_timeout_uses_env(monkeypatch):
     monkeypatch.setenv("LATENTSYNC_INFERENCE_TIMEOUT_SECONDS", "1800")
 
     assert _get_inference_timeout_seconds() == 1800
+
+
+def test_latentsync_inference_timeout_defaults_to_12_hours(monkeypatch):
+    monkeypatch.delenv("LATENTSYNC_INFERENCE_TIMEOUT_SECONDS", raising=False)
+
+    assert _get_inference_timeout_seconds() == 43200

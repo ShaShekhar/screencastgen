@@ -32,7 +32,7 @@ class LatentSyncPreset:
 # Default timeout (seconds) for waiting on a worker response.  Startup loads
 # models onto GPU so it gets a longer window; inference is per-chunk.
 _STARTUP_TIMEOUT = 300  # 5 minutes — model loading can be slow
-_DEFAULT_INFERENCE_TIMEOUT_SECONDS = 1800  # 30 minutes — quality preset can be slow on L4 GPUs
+_DEFAULT_INFERENCE_TIMEOUT_SECONDS = 43200  # 12 hours — allow long 512px runs
 _DEFAULT_IDLE_TIMEOUT_SECONDS = 60.0
 
 
@@ -53,23 +53,6 @@ PRESETS: Dict[str, LatentSyncPreset] = {
         ),
         guidance_scale=1.0,
         inference_steps=20,
-    ),
-    "balanced_256": LatentSyncPreset(
-        name="balanced_256",
-        config_candidates=(
-            ("configs", "unet", "stage2_256.yaml"),
-            ("configs", "unet", "stage2.yaml"),
-        ),
-        checkpoint_candidates=(
-            "LATENTSYNC_SMALL_CKPT",
-            "LATENTSYNC_CKPT",
-            "checkpoints/latentsync_unet_1_5.pt",
-            "checkpoints/latentsync_unet_256.pt",
-            "checkpoints/latentsync_unet_small.pt",
-            "checkpoints/latentsync_unet.pt",
-        ),
-        guidance_scale=1.5,
-        inference_steps=30,
     ),
     "quality": LatentSyncPreset(
         name="quality",
