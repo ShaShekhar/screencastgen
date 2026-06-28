@@ -10,6 +10,9 @@ from screencastgen.providers.lipsync.latentsync_provider import (
     LatentSyncRuntimeSpec,
     PRESETS,
     LatentSyncSession,
+    _SESSIONS,
+    _close_all_sessions,
+    close_idle_latentsync_sessions,
     download_latentsync_checkpoints,
     find_latentsync_python,
     find_latentsync_root,
@@ -156,3 +159,37 @@ def test_latentsync_session_sends_json_requests(tmp_path):
         "audio_path": "input.wav",
         "output_path": str(output_path),
     }
+
+
+def test_close_idle_latentsync_sessions_closes_cached_worker(tmp_path):
+    root = _make_latentsync_root(tmp_path / "LatentSync")
+    python_path = _make_executable(tmp_path / "python")
+    config_path = tmp_path / "stage2_512.yaml"
+    config_path.write_text("dummy", encoding="utf-8")
+    checkpoint_path = tmp_path / "latentsync_unet.pt"
+    checkpoint_path.write_text("dummy", encoding="utf-8")
+
+    spec = LatentSyncRuntimeSpec(
+        root=root,
+        python_executable=python_path,
+        device="cuda",
+        preset=PRESETS["quality"],
+        config_path=str(config_path),
+        checkpoint_path=str(checkpoint_path),
+        temp_dir=str(tmp_path / "temp"),
+    )
+    fake_process = _FakeProcess([{"ok": True, "event": "ready"}])
+
+    _close_all_sessions()
+    with patch("screencastgen.providers.lipsync.latentsync_provider.subprocess.Popen", return_value=fake_process):
+        session = LatentSyncSession(spec)
+
+    cache_key = (root, python_path, "cuda", "quality", str(checkpoint_path))
+    _SESSIONS[cache_key] = session
+    session._last_used_at = 0.0
+
+    assert close_idle_latentsync_sessions(idle_seconds=0.001) == 1
+    assert cache_key not in _SESSIONS
+    assert fake_process.poll() == 0
+    shutdown = json.loads(fake_process.stdin.writes[-1])
+    assert shutdown == {"cmd": "shutdown"}

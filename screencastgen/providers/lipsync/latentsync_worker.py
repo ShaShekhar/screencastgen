@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import os
 import sys
@@ -148,6 +149,21 @@ def _run_inference(state: LoadedPipeline, request: dict) -> str:
     return output_path
 
 
+def _release_cuda_cache() -> None:
+    with redirect_stdout(sys.stderr):
+        gc.collect()
+        try:
+            import torch
+        except ImportError:
+            return
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+            except RuntimeError:
+                pass
+
+
 def _serve(args) -> int:
     try:
         state = _load_pipeline(args)
@@ -179,9 +195,11 @@ def _serve(args) -> int:
         try:
             output_path = _run_inference(state, request)
         except Exception as exc:
+            _release_cuda_cache()
             _emit({"ok": False, "error": str(exc)})
             continue
 
+        _release_cuda_cache()
         _emit({"ok": True, "output_path": output_path})
 
     return 0

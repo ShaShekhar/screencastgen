@@ -48,6 +48,7 @@ services:
       TORCH_HOME: /root/.cache/torch
       LATENTSYNC_ROOT: /opt/latentsync
       LATENTSYNC_PYTHON: /opt/latentsync-env/bin/python
+      LATENTSYNC_IDLE_TIMEOUT_SECONDS: ${LATENTSYNC_IDLE_TIMEOUT_SECONDS:-30}
     volumes:
       - screencastgen-hf:/root/.cache/huggingface
       - screencastgen-torch:/root/.cache/torch

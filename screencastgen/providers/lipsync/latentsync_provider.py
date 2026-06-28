@@ -9,6 +9,7 @@ import os
 import select
 import subprocess
 import threading
+import time
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
@@ -32,6 +33,7 @@ class LatentSyncPreset:
 # models onto GPU so it gets a longer window; inference is per-chunk.
 _STARTUP_TIMEOUT = 300  # 5 minutes — model loading can be slow
 _INFERENCE_TIMEOUT = 600  # 10 minutes — long clips on slow GPUs
+_DEFAULT_IDLE_TIMEOUT_SECONDS = 60.0
 
 
 PRESETS: Dict[str, LatentSyncPreset] = {
@@ -72,6 +74,7 @@ PRESETS: Dict[str, LatentSyncPreset] = {
 
 _SESSIONS: Dict[Tuple[str, str, str, str, str], "LatentSyncSession"] = {}
 _SESSION_LOCK = threading.Lock()
+_IDLE_CLEANUP_TIMER: threading.Timer | None = None
 
 
 def _project_root() -> str:
@@ -245,6 +248,7 @@ class LatentSyncSession:
         self._run_lock = threading.Lock()
         self._process: subprocess.Popen[str] | None = None
         self._stderr_thread: threading.Thread | None = None
+        self._last_used_at = time.monotonic()
         self._start()
 
     def _command(self) -> list[str]:
@@ -357,28 +361,45 @@ class LatentSyncSession:
                 process.kill()
                 process.wait(timeout=5)
 
+    def close_if_idle(self, cutoff: float) -> bool:
+        if self._last_used_at > cutoff:
+            return False
+        if not self._run_lock.acquire(blocking=False):
+            return False
+        try:
+            if self._last_used_at > cutoff:
+                return False
+            self.close()
+            return True
+        finally:
+            self._run_lock.release()
+
     def run(self, video_path: str, audio_path: str, output_path: str) -> str:
         """Generate one lip-sync clip using the loaded LatentSync worker."""
-        with self._run_lock:
-            if self._process is None or self._process.poll() is not None:
-                self._start()
+        try:
+            with self._run_lock:
+                if self._process is None or self._process.poll() is not None:
+                    self._start()
 
-            process = self._process
-            if process is None or process.stdin is None:
-                raise RuntimeError("LatentSync worker is not running")
+                process = self._process
+                if process is None or process.stdin is None:
+                    raise RuntimeError("LatentSync worker is not running")
 
-            request = {
-                "cmd": "run",
-                "video_path": video_path,
-                "audio_path": audio_path,
-                "output_path": output_path,
-            }
-            process.stdin.write(json.dumps(request) + "\n")
-            process.stdin.flush()
+                request = {
+                    "cmd": "run",
+                    "video_path": video_path,
+                    "audio_path": audio_path,
+                    "output_path": output_path,
+                }
+                process.stdin.write(json.dumps(request) + "\n")
+                process.stdin.flush()
 
-            message = self._read_message(context="inference", timeout=_INFERENCE_TIMEOUT)
-            if not message.get("ok"):
-                raise RuntimeError(message.get("error", "LatentSync worker failed"))
+                message = self._read_message(context="inference", timeout=_INFERENCE_TIMEOUT)
+                if not message.get("ok"):
+                    raise RuntimeError(message.get("error", "LatentSync worker failed"))
+        finally:
+            self._last_used_at = time.monotonic()
+            _schedule_idle_cleanup()
 
         if not os.path.isfile(output_path):
             raise RuntimeError(f"LatentSync completed but output file not found at {output_path}")
@@ -386,7 +407,11 @@ class LatentSyncSession:
 
 
 def _close_all_sessions() -> None:
+    global _IDLE_CLEANUP_TIMER
     with _SESSION_LOCK:
+        if _IDLE_CLEANUP_TIMER is not None:
+            _IDLE_CLEANUP_TIMER.cancel()
+            _IDLE_CLEANUP_TIMER = None
         sessions = list(_SESSIONS.values())
         _SESSIONS.clear()
     for session in sessions:
@@ -394,6 +419,70 @@ def _close_all_sessions() -> None:
 
 
 atexit.register(_close_all_sessions)
+
+
+def _get_idle_timeout_seconds() -> float | None:
+    raw = os.environ.get("LATENTSYNC_IDLE_TIMEOUT_SECONDS")
+    if raw is None:
+        return _DEFAULT_IDLE_TIMEOUT_SECONDS
+
+    value = raw.strip().lower()
+    if value in {"", "0", "none", "off", "false", "disabled"}:
+        return None
+    try:
+        timeout = float(value)
+    except ValueError:
+        logger.warning(
+            "Ignoring invalid LATENTSYNC_IDLE_TIMEOUT_SECONDS=%r; using %.0fs",
+            raw,
+            _DEFAULT_IDLE_TIMEOUT_SECONDS,
+        )
+        return _DEFAULT_IDLE_TIMEOUT_SECONDS
+    if timeout <= 0:
+        return None
+    return timeout
+
+
+def close_idle_latentsync_sessions(idle_seconds: float | None = None) -> int:
+    """Close cached LatentSync workers that have been idle long enough."""
+    timeout = _get_idle_timeout_seconds() if idle_seconds is None else idle_seconds
+    if timeout is None:
+        return 0
+
+    cutoff = time.monotonic() - timeout
+    closed = 0
+    with _SESSION_LOCK:
+        for key, session in list(_SESSIONS.items()):
+            if session.close_if_idle(cutoff):
+                _SESSIONS.pop(key, None)
+                closed += 1
+    if closed:
+        logger.info("Closed %s idle LatentSync worker session(s)", closed)
+    return closed
+
+
+def _idle_cleanup_tick() -> None:
+    global _IDLE_CLEANUP_TIMER
+    with _SESSION_LOCK:
+        _IDLE_CLEANUP_TIMER = None
+    close_idle_latentsync_sessions()
+    _schedule_idle_cleanup()
+
+
+def _schedule_idle_cleanup() -> None:
+    global _IDLE_CLEANUP_TIMER
+    timeout = _get_idle_timeout_seconds()
+    if timeout is None:
+        return
+
+    with _SESSION_LOCK:
+        if not _SESSIONS:
+            return
+        if _IDLE_CLEANUP_TIMER is not None:
+            _IDLE_CLEANUP_TIMER.cancel()
+        _IDLE_CLEANUP_TIMER = threading.Timer(timeout, _idle_cleanup_tick)
+        _IDLE_CLEANUP_TIMER.daemon = True
+        _IDLE_CLEANUP_TIMER.start()
 
 
 def _build_runtime_spec(device: str, preset_name: str) -> LatentSyncRuntimeSpec:
@@ -430,7 +519,12 @@ def _get_session(device: str, preset_name: str) -> LatentSyncSession:
         if session is None:
             session = LatentSyncSession(spec)
             _SESSIONS[cache_key] = session
-        return session
+            needs_cleanup_timer = True
+        else:
+            needs_cleanup_timer = False
+    if needs_cleanup_timer:
+        _schedule_idle_cleanup()
+    return session
 
 
 def download_latentsync_checkpoints(
