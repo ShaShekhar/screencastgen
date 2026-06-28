@@ -212,6 +212,50 @@ def test_lipsync_uses_bundled_preset_paths_without_uploads(monkeypatch):
     transcribe.assert_not_called()
 
 
+def test_lipsync_preset_placeholder_ref_text_forces_transcription(monkeypatch):
+    from web.backend.services import lipsync_presets
+
+    preset = SimpleNamespace(
+        id="default-presenter",
+        video_exists=True,
+        audio_exists=False,
+        video_abs_path="/presets/default-presenter.mp4",
+        audio_abs_path="",
+        audio_file="",
+        ref_text="Exact transcript of the speech in the presenter video.",
+        language="en-US",
+    )
+    transcribe = Mock(return_value="real presenter transcript")
+    extract = Mock(return_value="/tmp/extracted-presenter.wav")
+    monkeypatch.setattr(lipsync_presets, "get_lipsync_preset", lambda _id: preset)
+    monkeypatch.setattr(pipelines, "_extract_reference_audio_from_video", extract)
+    monkeypatch.setattr(pipelines, "transcribe_upload", transcribe)
+
+    request = pipelines._build_lipsync_request(
+        SimpleNamespace(
+            config_json={
+                "preset_id": "default-presenter",
+                "tts_server_url": "http://gpu:8100",
+                "language": "en-US",
+            },
+            ref_audio_file_id=None,
+            ref_video_file_id=None,
+        ),
+        "/tmp/document.pdf",
+        "/tmp/output",
+        _Session(None),
+    )
+
+    assert request.ref_audio == "/tmp/extracted-presenter.wav"
+    assert request.ref_text == "real presenter transcript"
+    extract.assert_called_once_with("/presets/default-presenter.mp4", "/tmp/output")
+    transcribe.assert_called_once_with(
+        "http://gpu:8100",
+        "/tmp/extracted-presenter.wav",
+        language="en-US",
+    )
+
+
 def test_lipsync_config_accepts_bundled_preset_without_uploaded_refs():
     cfg = LipsyncConfig(preset_id="default-presenter")
 

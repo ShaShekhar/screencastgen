@@ -43,6 +43,9 @@ logger = logging.getLogger(__name__)
 
 REFERENCE_VIDEO_AUDIO_SECONDS = 8
 REFERENCE_AUDIO_EXTRACT_TIMEOUT_SECONDS = 60
+_REF_TEXT_PLACEHOLDERS = {
+    "exact transcript of the speech in the presenter video.",
+}
 
 
 def _upload_reader_assets(job_id: uuid.UUID, output_dir: str) -> None:
@@ -206,7 +209,7 @@ def _build_lipsync_request(
         output_filename = stem + "_reader.zip"
 
     ref_audio_path = ""
-    ref_text = cfg.get("ref_text")
+    ref_text = _usable_ref_text(cfg.get("ref_text"))
     ref_audio = None
     ref_video = None
     ref_video_path = ""
@@ -225,19 +228,19 @@ def _build_lipsync_request(
             raise ValueError(f"Lip-sync preset '{preset_id}' is missing its audio file")
         ref_video_path = preset.video_abs_path
         ref_audio_path = preset.audio_abs_path if preset.audio_exists else ""
-        ref_text = ref_text or preset.ref_text
+        ref_text = ref_text or _usable_ref_text(preset.ref_text)
         preset_language = preset.language
     elif job.ref_audio_file_id:
         ref_audio = db_session.get(UploadedFile, job.ref_audio_file_id)
         if ref_audio:
             ref_audio_path = get_upload_abs_path(ref_audio.stored_path)
-            ref_text = ref_text or ref_audio.ref_text
+            ref_text = ref_text or _usable_ref_text(ref_audio.ref_text)
 
     if not preset_id and job.ref_video_file_id:
         ref_video = db_session.get(UploadedFile, job.ref_video_file_id)
         if ref_video:
             ref_video_path = get_upload_abs_path(ref_video.stored_path)
-            ref_text = ref_text or ref_video.ref_text
+            ref_text = ref_text or _usable_ref_text(ref_video.ref_text)
 
     if not ref_audio_path and ref_video_path:
         ref_audio_path = _extract_reference_audio_from_video(ref_video_path, output_dir)
@@ -283,6 +286,16 @@ def _build_lipsync_request(
         resolution=f"{cfg.get('width', DEFAULT_VIDEO_WIDTH)}x{cfg.get('height', DEFAULT_VIDEO_HEIGHT)}",
         fps=cfg.get("fps", DEFAULT_VIDEO_FPS),
     )
+
+
+def _usable_ref_text(ref_text: Optional[str]) -> Optional[str]:
+    """Return clean reference text, treating manifest placeholders as missing."""
+    text = (ref_text or "").strip()
+    if not text:
+        return None
+    if text.lower() in _REF_TEXT_PLACEHOLDERS:
+        return None
+    return text
 
 
 def _extract_reference_audio_from_video(video_path: str, output_dir: str) -> str:
