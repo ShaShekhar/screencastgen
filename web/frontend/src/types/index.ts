@@ -163,14 +163,6 @@ export interface ReaderStatus {
   message: string;
 }
 
-export type Mp4ExportStatus = "running" | "done" | "failed" | null;
-
-export interface Mp4ExportState {
-  export_status: Mp4ExportStatus;
-  export_output: string | null;
-  export_error: string | null;
-}
-
 export type EpubExportStatus = "running" | "done" | "failed" | null;
 
 export interface EpubExportState {

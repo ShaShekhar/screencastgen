@@ -4,7 +4,6 @@ import {
   Job,
   JobCreateRequest,
   JobListResponse,
-  Mp4ExportState,
 } from "../types";
 
 export async function createJob(req: JobCreateRequest): Promise<Job> {
@@ -38,20 +37,6 @@ export async function stopJob(id: string): Promise<void> {
 
 export function getDownloadUrl(id: string): string {
   return `/api/jobs/${id}/download`;
-}
-
-export async function requestMp4Export(id: string): Promise<Mp4ExportState> {
-  const resp = await api.post(`/jobs/${id}/export-mp4`);
-  return resp.data;
-}
-
-export async function getMp4ExportStatus(id: string): Promise<Mp4ExportState> {
-  const resp = await api.get<Mp4ExportState>(`/jobs/${id}/export-mp4/status`);
-  return resp.data;
-}
-
-export function getMp4ExportDownloadUrl(id: string): string {
-  return `/api/jobs/${id}/export-mp4/download`;
 }
 
 export async function requestEpubExport(id: string): Promise<EpubExportState> {

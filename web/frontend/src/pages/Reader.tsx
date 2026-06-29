@@ -21,14 +21,10 @@ import {
   getEpubExportDownloadUrl,
   getEpubExportStatus,
   getDownloadUrl,
-  getMp4ExportDownloadUrl,
-  getMp4ExportStatus,
   requestEpubExport,
-  requestMp4Export,
 } from "../api/jobs";
 import {
   EpubExportStatus,
-  Mp4ExportStatus,
   ReaderChunk,
   ReaderManifest,
 } from "../types";
@@ -484,8 +480,6 @@ export default function Reader() {
   });
   const [pipCursor, setPipCursor] = useState("grab");
   const [pipVisible, setPipVisible] = useState(true);
-  const [exportStatus, setExportStatus] = useState<Mp4ExportStatus>(null);
-  const [exportError, setExportError] = useState<string | null>(null);
   const [epubStatus, setEpubStatus] = useState<EpubExportStatus>(null);
   const [epubError, setEpubError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -566,47 +560,6 @@ export default function Reader() {
   }, [id]);
 
   const hasPresenter = !!manifest?.presenter;
-
-  // Poll the composited-MP4 export status (lip-sync presenters only).
-  // Re-arms whenever the status returns to "running" (e.g. after Export).
-  useEffect(() => {
-    if (!id || !hasPresenter) return;
-    if (exportStatus === "done" || exportStatus === "failed") return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const poll = () => {
-      getMp4ExportStatus(id)
-        .then((state) => {
-          if (cancelled) return;
-          setExportStatus(state.export_status);
-          setExportError(state.export_error);
-          if (state.export_status === "running") {
-            timer = setTimeout(poll, 3000);
-          }
-        })
-        .catch(() => undefined);
-    };
-    poll();
-
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [id, hasPresenter, exportStatus]);
-
-  const handleExport = useCallback(async () => {
-    if (!id) return;
-    setExportError(null);
-    setExportStatus("running");
-    try {
-      const state = await requestMp4Export(id);
-      setExportStatus(state.export_status ?? "running");
-    } catch {
-      setExportStatus("failed");
-      setExportError("Could not start the MP4 export.");
-    }
-  }, [id]);
 
   useEffect(() => {
     if (!id || !hasPresenter) return;
@@ -1028,33 +981,6 @@ export default function Reader() {
               >
                 ↓ Offline reader
               </a>
-              {exportStatus === "done" ? (
-                <a
-                  href={getMp4ExportDownloadUrl(id)}
-                  className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] transition"
-                >
-                  ↓ Composited MP4
-                </a>
-              ) : exportStatus === "running" ? (
-                <span className="text-xs text-[var(--reader-muted)] px-1">
-                  Baking MP4…
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleExport}
-                  title={
-                    exportStatus === "failed"
-                      ? exportError || "The MP4 export failed — click to retry."
-                      : undefined
-                  }
-                  className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] transition"
-                >
-                  {exportStatus === "failed"
-                    ? "Retry MP4 export"
-                    : "Export composited MP4"}
-                </button>
-              )}
               {epubStatus === "done" ? (
                 <a
                   href={getEpubExportDownloadUrl(id)}
