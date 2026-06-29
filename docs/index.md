@@ -38,6 +38,28 @@ Read the [architecture overview](concepts/architecture.md) for the complete
 design or browse the [developer reference](reference/index.md) for individual
 modules and services.
 
+## How it works
+
+Document pipelines share the same extraction-to-speech foundation:
+
+1. Extract text from the source document.
+2. Preprocess text to fix common PDF and document artifacts.
+3. Split text into sentences and backend-sized chunks.
+4. Validate chunks before synthesis.
+5. Generate narration with the selected TTS provider.
+6. Concatenate synthesized chunks into a complete audio track.
+
+Highlight and lip-sync outputs add word-level alignment after synthesis. PDF
+inputs use page images plus PyMuPDF word positions for precise highlighting;
+other document formats use a reflowed text renderer. Lip-sync outputs then
+animate the reference presenter with the selected face-animation provider and
+package the result as a LipSync Reader or EPUB depending on the requested
+format. The offline reader ZIP is the recommended portable output.
+
+The same provider abstraction works locally or against a remote GPU server:
+client-side document processing stays on the CPU host, while model-heavy TTS,
+alignment, and lip-sync work can run remotely.
+
 ## Supported implementations
 
 - **Text to speech:** Qwen3-TTS locally, or the remote TTS client

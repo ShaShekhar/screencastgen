@@ -69,19 +69,6 @@ Download the job's output file. The response type depends on the configured [sto
 - **Local:** `FileResponse` (direct file stream)
 - **GCS/S3:** `RedirectResponse` to a time-limited signed URL
 
-### `POST /api/jobs/{job_id}/export-mp4`
-Trigger an on-demand baked MP4 export for a completed lip-sync reader job. The task stores export state in `job.config_json`:
-
-- `export_status`: `running`, `done`, or `failed`
-- `export_output`: output filename when complete
-- `export_error`: error message when failed
-
-### `GET /api/jobs/{job_id}/export-mp4/status`
-Return current export state.
-
-### `GET /api/jobs/{job_id}/export-mp4/download`
-Download the exported composited MP4 when `export_status == "done"`.
-
 ### `POST /api/jobs/{job_id}/export-epub`
 Trigger an on-demand text-and-narration EPUB export for a completed lip-sync
 reader job. The presenter is intentionally omitted because EPUB reading systems
@@ -109,7 +96,7 @@ Jobs Router
 ├── DB Models          (Job, JobStatus, UploadedFile)
 ├── Schemas            (JobCreateRequest, JobResponse, JobListResponse)
 ├── Storage Service    (delete_job_files, get_download_response)
-└── Pipeline Tasks     (main, MP4-export, and EPUB-export tasks; lazy imports)
+└── Pipeline Tasks     (main and EPUB-export tasks; lazy imports)
 ```
 
 ---

@@ -1,9 +1,10 @@
-# Generate a lip-synced presenter
+# Generate a LipSync Reader
 
 The lip-sync pipeline combines narration, word alignment, and a reference face
-video. LatentSync generates presenter clips delivered primarily through the
-hosted reader or a standalone offline reader ZIP. A baked MP4 and a
-text-and-narration EPUB are secondary exports.
+video. LatentSync generates presenter clips delivered through the hosted reader
+or a standalone offline reader ZIP. The offline reader ZIP is the recommended
+portable output because it preserves the synchronized document, narration, and
+presenter experience.
 
 ## Basic command
 
@@ -22,13 +23,12 @@ sidecar environment, and downloaded checkpoints.
 
 | Format | Use case |
 | --- | --- |
-| `reader` | Hosted reader assets plus a standalone ZIP with document, narration, and movable presenter; this is the default |
+| `reader` | Hosted reader assets plus a standalone offline reader ZIP with document, narration, and movable presenter; this is the default and recommended output |
 | `epub` | Text-and-narration accessibility export using Media Overlays; presenter omitted and reader support varies |
-| `mp4` | Precomposed video at a fixed resolution and presenter position |
 
-For reader and video layouts, configure `--face-position` and `--face-scale`.
-Choose `--latentsync-preset small` for the fast 256px path or `quality` for
-the default 512px path.
+For reader layouts, configure `--face-position` and `--face-scale`. Choose
+`--latentsync-preset small` for the fast 256px path or `quality` for the default
+512px path.
 
 To run inference elsewhere, combine the command with `--backend remote` and
 the [remote GPU setup](remote-gpu.md).

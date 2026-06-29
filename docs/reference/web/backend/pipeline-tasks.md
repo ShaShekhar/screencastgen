@@ -76,10 +76,6 @@ Builds `LipsyncPipelineRequest`, resolving:
 
 Builds `VisualizationPipelineRequest` from `VisualizationConfig`. Visualization jobs do not require an uploaded document.
 
-### `run_lipsync_export_task(job_id: str)`
-
-Re-runs a completed lip-sync job in `mp4` mode against the existing output directory. The TTS/alignment/lip-sync pages are expected to resume from `processing_status.json`; the task mainly bakes the reader-style output into a composited MP4 and records export state in `config_json`.
-
 ### `run_lipsync_epub_export_task(job_id: str)`
 
 Re-runs a completed lip-sync job in `epub` mode against the existing output

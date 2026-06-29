@@ -1,6 +1,6 @@
 # PipelineSelector
 
-> Pipeline type chooser, prioritizing the full talking-head reader workflow.
+> Pipeline type chooser, prioritizing the full LipSync Reader workflow.
 
 **Source:** [`web/frontend/src/components/PipelineSelector.tsx`](https://github.com/ShaShekhar/screencastgen/blob/main/web/frontend/src/components/PipelineSelector.tsx)
 
@@ -21,7 +21,7 @@
 
 | Value | Label | Description |
 |-------|-------|-------------|
-| `lipsync` | Talking-Head Reader | Synchronized document, narration, and lip-synced presenter |
+| `lipsync` | LipSync Reader | Synchronized document, narration, and lip-synced presenter |
 | `highlight` | Read-Along EPUB | Secondary accessibility export with synchronized text and narration |
 | `visualization` | Concept Visualization | Prompt-driven math animation rendered as a standalone MP4 |
 

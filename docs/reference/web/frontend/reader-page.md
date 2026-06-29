@@ -16,7 +16,6 @@
 - **Page image preview** — Shows the active PDF page image in a sticky side panel when page assets exist
 - **Presenter PiP** — Lip-sync reader jobs use `presenter.mp4` as the playback clock in a draggable, edge-resizable picture-in-picture frame
 - **Offline reader download** — The primary lip-sync job artifact is a standalone ZIP containing the local viewer and all required assets
-- **On-demand MP4 export** — Completed lip-sync reader jobs can trigger and download a baked composited MP4 from the reader header
 - **On-demand EPUB export** — Completed lip-sync reader jobs can trigger and download a text-and-narration EPUB; presenter video is omitted and reading-system support varies
 - **Playback dock** — Bottom control bar with play/pause, scrubber, duration, playback speed, and auto-scroll toggle
 - **Deferred control hiding** — Playback controls stay visible before first play, then auto-hide after inactivity near the bottom edge
@@ -41,7 +40,6 @@
 | `theme` | `"night" \| "pdf"` | Persisted reader color theme |
 | `pipWidth` | `number` | Persisted presenter PiP width |
 | `pipPos` | `{x, y}` | Persisted presenter PiP position |
-| `exportStatus` | `Mp4ExportStatus` | On-demand MP4 export state |
 | `epubStatus` | `EpubExportStatus` | On-demand EPUB export state |
 | `epubError` | `string \| null` | EPUB export failure detail |
 
@@ -54,7 +52,6 @@
 - `getReaderPresenterUrl(id)` from [Reader API](reader-api.md) — `<video>` presenter source URL
 - `getReaderPageUrl(id, filename)` from [Reader API](reader-api.md) — sticky page-preview image URL
 - `getDownloadUrl(id)` from [Jobs API](jobs-api.md) — standalone offline-reader ZIP
-- `requestMp4Export(id)`, `getMp4ExportStatus(id)`, `getMp4ExportDownloadUrl(id)` from [Jobs API](jobs-api.md) — lip-sync composited MP4 export
 - `requestEpubExport(id)`, `getEpubExportStatus(id)`, `getEpubExportDownloadUrl(id)` from [Jobs API](jobs-api.md) — text-and-narration EPUB export
 
 ---

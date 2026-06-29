@@ -1,6 +1,6 @@
 # Lipsync Pipeline
 
-> Audio + alignment + face animation → hosted/offline reader, baked MP4, or narration-only EPUB.
+> Audio + alignment + face animation → hosted/offline LipSync Reader or narration-only EPUB.
 
 **Source:** [`screencastgen/pipelines/lipsync.py`](https://github.com/ShaShekhar/screencastgen/blob/main/screencastgen/pipelines/lipsync.py)
 
@@ -9,7 +9,8 @@
 ## Function
 
 ### `run_lipsync_pipeline(request, reporter, backend_factory) -> PipelineRunResult`
-Full pipeline: synthesize voice-cloned audio, align words, generate lip-synced face videos per chunk/page, then build the requested output format.
+Full pipeline: synthesize voice-cloned audio, align words, generate lip-synced
+face videos per chunk/page, then build the requested output format.
 
 ---
 
@@ -19,18 +20,15 @@ Full pipeline: synthesize voice-cloned audio, align words, generate lip-synced f
 1. Validate document + ref_video exist; ref_audio is optional when the reference video contains usable speech audio
 2. Create TTS backend               ← TTS Registry
 3. Extract and chunk                 ← Pipeline Common
-   ├── EPUB/reader: page-aware chunking
-   └── MP4: standard chunking + extract word bboxes  ← Extractor (PyMuPDF)
+   └── EPUB/reader: page-aware chunking
 4. Validate and synthesize           ← Pipeline Common
 5. Align chunks                      ← Pipeline Common → Aligner
 6. For each chunk:
    ├── Loop ref_video to audio duration
    └── Generate lip-sync video       ← Lipsync Facade or Remote GPU Client
 7. Build output:
-   ├── MP4 (PDF input):  Word Matcher → Page Renderer + face → Video Composer
-   ├── MP4 (other input): Highlight Renderer + face → Video Composer
-   ├── EPUB: EPUB Builder
-   └── reader: presenter.mp4 + Reader Assets
+   ├── reader: presenter.mp4 + Reader Assets
+   └── EPUB: EPUB Builder
 ```
 
 When the PDF page-image path is active, the same bbox-matching and oversampled page-rendering logic used by [Highlight Pipeline](highlight-pipeline.md) is reused before the face clip is composited.
@@ -56,8 +54,7 @@ Inherits all fields from [HighlightPipelineRequest](pipeline-types.md).
 
 | Format | Output |
 |--------|--------|
-| `reader` | `<document>_reader.zip` plus hosted `reader_manifest.json`, audio, page images, and `presenter.mp4`; this is the default |
-| `mp4` | Baked composite video |
+| `reader` | `<document>_reader.zip` plus hosted `reader_manifest.json`, audio, page images, and `presenter.mp4`; this is the default and recommended output |
 | `epub` | EPUB3 text and narration with Media Overlays; presenter video is intentionally omitted |
 
 ## Progress And Cancellation
@@ -76,7 +73,7 @@ cancellation requests are forwarded to the GPU server's
 its perspective. Local provider calls are not interrupted; the stop is observed
 before starting the next page.
 
-If at least one page finished, the EPUB, reader, or MP4 output is built from the
+If at least one page finished, the reader or EPUB output is built from the
 completed prefix. Reader presenter video is rebuilt instead of reusing a cached
 full-length presenter. A stop before the first completed page fails because
 there is no usable output.

@@ -99,7 +99,7 @@ web/frontend/src/
 1. Completed highlight/lip-sync jobs expose reader assets through [Reader Router](../reference/web/backend/reader-router.md)
 2. [Reader Page](../reference/web/frontend/reader-page.md) streams the manifest, audio, page images, and optional presenter video
 3. The primary job download is a standalone reader ZIP that opens without the web service
-4. Lip-sync reader jobs can request `export-mp4` for a baked composite or `export-epub` for a text-and-narration accessibility export
+4. Lip-sync reader jobs can request `export-epub` for a text-and-narration accessibility export
 
 ---
 

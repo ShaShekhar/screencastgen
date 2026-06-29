@@ -16,9 +16,6 @@
 | `deleteJob(id)` | DELETE | `/api/jobs/{id}` | Delete job + files |
 | `stopJob(id)` | POST | `/api/jobs/{id}/stop` | Request early stop for a running lip-sync job |
 | `getDownloadUrl(id)` | — | `/api/jobs/{id}/download` | Returns URL string |
-| `requestMp4Export(id)` | POST | `/api/jobs/{id}/export-mp4` | Start a lip-sync composited MP4 export |
-| `getMp4ExportStatus(id)` | GET | `/api/jobs/{id}/export-mp4/status` | Poll export state |
-| `getMp4ExportDownloadUrl(id)` | — | `/api/jobs/{id}/export-mp4/download` | Returns exported MP4 URL string |
 | `requestEpubExport(id)` | POST | `/api/jobs/{id}/export-epub` | Start a text-and-narration EPUB export |
 | `getEpubExportStatus(id)` | GET | `/api/jobs/{id}/export-epub/status` | Poll EPUB export state |
 | `getEpubExportDownloadUrl(id)` | — | `/api/jobs/{id}/export-epub/download` | Returns exported EPUB URL string |
@@ -30,7 +27,7 @@
 - `JobCreateRequest` — Request body for `createJob()`
 - `Job` — Response from `getJob()`
 - `JobListResponse` — Response from `listJobs()`
-- `Mp4ExportState` / `EpubExportState` — Independent export status responses
+- `EpubExportState` — Independent export status response
 
 All types defined in `types/index.ts`.
 
@@ -42,7 +39,7 @@ All types defined in `types/index.ts`.
 - [NewJob Page](new-job-page.md) — `createJob()`
 - [JobDetail Page](job-detail-page.md) — `getJob()`, `deleteJob()`, `getDownloadUrl()`
 - [LipsyncRunPanel](lipsync-run-panel.md) — `stopJob()`
-- [Reader Page](reader-page.md) — Offline-reader download and MP4/EPUB export helpers
+- [Reader Page](reader-page.md) — Offline-reader download and EPUB export helpers
 
 ---
 

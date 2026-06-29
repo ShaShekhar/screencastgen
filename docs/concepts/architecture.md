@@ -65,7 +65,11 @@ The [Storage Service](../reference/web/backend/storage-service.md) uses a `Stora
 The web API stores a confirmed lip-sync stop request in Redis. Remote runs forward it to the GPU job; local runs observe it between provider calls. When pages have already completed, the pipeline builds the output from that prefix and records stopped-early counts/timings in result metadata. An empty partial run fails instead of creating an unusable artifact.
 
 ### Reader-First Lip-Sync Output
-The web lip-sync default is a browser reader bundle instead of a baked composite video. The pipeline concatenates per-page presenter clips into `presenter.mp4`, builds shared reader assets with [Reader Assets](../reference/core/reader-assets.md), and lets the browser combine document text/page images with a draggable/resizable presenter. A baked MP4 can still be exported on demand from the reader.
+The web lip-sync default is the LipSync Reader. The pipeline concatenates
+per-page presenter clips into `presenter.mp4`, builds shared reader assets with
+[Reader Assets](../reference/core/reader-assets.md), and lets the browser
+combine document text/page images with a draggable/resizable presenter. The
+standalone offline reader ZIP is the recommended portable output.
 
 ---
 
