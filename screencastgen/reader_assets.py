@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import List, Optional
 
+from .extractor import MARKDOWN_EXTENSIONS, read_markdown_source
 from .types import AlignedChunk
 
 
@@ -20,7 +22,9 @@ MANIFEST_NAME = "reader_manifest.json"
 AUDIO_NAME = "reader_audio.mp3"
 PRESENTER_NAME = "presenter.mp4"
 PAGES_DIR = "pages"
+SOURCE_DOCUMENT_STEM = "source_document"
 PAGE_IMAGE_WIDTH = 1400  # pixels; fits desktop readers and downscales on mobile
+SOURCE_COPY_EXTENSIONS = {".pdf", *MARKDOWN_EXTENSIONS}
 
 
 def _audio_duration_secs(path: str) -> float:
@@ -96,6 +100,57 @@ def _render_pages(pdf_path: str, page_nums: List[int], pages_dir: str) -> dict:
     return result
 
 
+def _source_document_filename(source_path: str) -> str | None:
+    ext = os.path.splitext(source_path)[1].lower()
+    if ext not in SOURCE_COPY_EXTENSIONS:
+        return None
+    return f"{SOURCE_DOCUMENT_STEM}{ext}"
+
+
+def ensure_source_document(output_dir: str, source_path: str) -> str | None:
+    """Copy the display source into the reader output directory.
+
+    PDF readers can use the original PDF directly when page rasterisation is
+    unavailable, and Markdown readers keep the source alongside the manifest.
+    """
+    filename = _source_document_filename(source_path)
+    if not filename or not os.path.isfile(source_path):
+        return None
+    os.makedirs(output_dir, exist_ok=True)
+    dest = os.path.join(output_dir, filename)
+    if os.path.abspath(source_path) != os.path.abspath(dest):
+        shutil.copy2(source_path, dest)
+    return filename
+
+
+def refresh_manifest_source(manifest_path: str, source_path: str) -> bool:
+    """Update an existing reader manifest with current source display data."""
+    with open(manifest_path, "r", encoding="utf-8") as fh:
+        manifest = json.load(fh)
+
+    output_dir = os.path.dirname(os.path.abspath(manifest_path))
+    changed = False
+    source_ext = os.path.splitext(source_path)[1].lower().lstrip(".") or "text"
+    if manifest.get("source_type") != source_ext:
+        manifest["source_type"] = source_ext
+        changed = True
+
+    source_file = ensure_source_document(output_dir, source_path)
+    if source_file and manifest.get("source_file") != source_file:
+        manifest["source_file"] = source_file
+        changed = True
+
+    source_markdown = read_markdown_source(source_path)
+    if source_markdown is not None and manifest.get("source_markdown") != source_markdown:
+        manifest["source_markdown"] = source_markdown
+        changed = True
+
+    if changed:
+        with open(manifest_path, "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh, ensure_ascii=False)
+    return changed
+
+
 def build_reader_assets(
     aligned_chunks: List[AlignedChunk],
     output_dir: str,
@@ -152,17 +207,14 @@ def build_reader_assets(
         )
 
     source_ext = os.path.splitext(pdf_path)[1].lower().lstrip(".") or "text"
-    try:
-        from .extractor import read_markdown_source
-
-        source_markdown = read_markdown_source(pdf_path)
-    except Exception:
-        source_markdown = None
+    source_file = ensure_source_document(output_dir, pdf_path)
+    source_markdown = read_markdown_source(pdf_path)
     manifest = {
         "version": 1,
         "title": title,
         "language": language,
         "source_type": source_ext,
+        "source_file": source_file,
         "source_markdown": source_markdown,
         "duration": round(total_duration, 3),
         "audio": AUDIO_NAME,

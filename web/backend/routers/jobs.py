@@ -1,5 +1,8 @@
 """Job CRUD and download endpoints."""
 
+import json
+import logging
+import os
 from uuid import UUID
 
 import redis
@@ -10,9 +13,19 @@ from ..config import settings
 from ..database import async_session_factory
 from ..models import Job, JobStatus, PipelineType, UploadedFile
 from ..schemas import JobCreateRequest, JobListResponse, JobResponse
-from ..services.storage import delete_job_files, get_download_response
+from screencastgen.offline_reader import build_offline_reader_archive
+from screencastgen.reader_assets import MANIFEST_NAME, refresh_manifest_source
+
+from ..services.storage import (
+    delete_job_files,
+    get_download_response,
+    get_output_local_path,
+    get_upload_abs_path,
+    upload_output,
+)
 
 router = APIRouter(tags=["jobs"])
+logger = logging.getLogger(__name__)
 
 
 def _build_config(req: JobCreateRequest) -> dict:
@@ -38,6 +51,41 @@ def _build_config(req: JobCreateRequest) -> dict:
         return cfg
     # Use defaults
     return {}
+
+
+def _refresh_reader_archive_for_download(job: Job, uploaded: UploadedFile | None) -> None:
+    """Rebuild reader ZIPs so downloads use the current offline reader HTML."""
+    if (
+        job.pipeline_type not in (PipelineType.highlight, PipelineType.lipsync)
+        or not job.output_path
+        or not job.output_path.lower().endswith(".zip")
+    ):
+        return
+
+    try:
+        manifest_path = get_output_local_path(job.id, MANIFEST_NAME)
+    except FileNotFoundError:
+        return
+    if not os.path.isfile(manifest_path):
+        return
+
+    if uploaded:
+        try:
+            if refresh_manifest_source(manifest_path, get_upload_abs_path(uploaded.stored_path)):
+                upload_output(job.id, MANIFEST_NAME)
+            with open(manifest_path, "r", encoding="utf-8") as fh:
+                source_file = (json.load(fh) or {}).get("source_file")
+            if source_file:
+                upload_output(job.id, str(source_file))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Reader source refresh failed for job %s: %s", job.id, exc)
+
+    try:
+        archive_path = get_output_local_path(job.id, job.output_path)
+    except FileNotFoundError:
+        return
+    build_offline_reader_archive(manifest_path, archive_path)
+    upload_output(job.id, job.output_path)
 
 
 @router.post("/jobs", response_model=JobResponse)
@@ -195,6 +243,12 @@ async def download_job(job_id: UUID):
             raise HTTPException(400, "Job output not available")
 
         try:
+            uploaded = (
+                await session.get(UploadedFile, job.uploaded_file_id)
+                if job.uploaded_file_id
+                else None
+            )
+            _refresh_reader_archive_for_download(job, uploaded)
             return get_download_response(job_id, job.output_path)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc

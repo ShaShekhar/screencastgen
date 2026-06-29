@@ -674,6 +674,79 @@ class TestLipsyncReaderBundle:
         assert "No page image available" not in html
         assert '"source_markdown": "# Heading\\n\\n- **Bold** item\\n"' in html
 
+    def test_offline_archive_can_package_source_pdf(self, tmp_path):
+        from screencastgen.offline_reader import build_offline_reader_archive
+        from screencastgen.reader_assets import MANIFEST_NAME
+
+        (tmp_path / "reader_audio.mp3").write_bytes(b"audio")
+        (tmp_path / "source_document.pdf").write_bytes(b"%PDF-1.4\n")
+        manifest = {
+            "version": 1,
+            "title": "PDF Test",
+            "language": "en",
+            "source_type": "pdf",
+            "source_file": "source_document.pdf",
+            "duration": 1.0,
+            "audio": "reader_audio.mp3",
+            "presenter": None,
+            "pages": None,
+            "chunks": [{
+                "chunk_num": 1,
+                "text": "hello",
+                "offset": 0,
+                "pages": [1],
+                "words": [{"word": "hello", "start": 0, "end": 1}],
+            }],
+        }
+        manifest_path = tmp_path / MANIFEST_NAME
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        output = tmp_path / "offline.zip"
+        build_offline_reader_archive(str(manifest_path), str(output))
+
+        with zipfile.ZipFile(output) as archive:
+            names = set(archive.namelist())
+            html = archive.read("index.html").decode()
+
+        assert "source_document.pdf" in names
+        assert "source-pdf" in html
+        assert "has-document" in html
+        assert "No page image available" not in html
+
+    def test_refresh_manifest_source_updates_pdf_and_markdown(self, tmp_path):
+        from screencastgen.reader_assets import MANIFEST_NAME, refresh_manifest_source
+
+        manifest_path = tmp_path / MANIFEST_NAME
+        manifest_path.write_text(
+            json.dumps({
+                "version": 1,
+                "title": "Source Test",
+                "language": "en",
+                "duration": 1.0,
+                "audio": "reader_audio.mp3",
+                "presenter": None,
+                "pages": None,
+                "chunks": [],
+            }),
+            encoding="utf-8",
+        )
+        pdf_path = tmp_path / "lesson.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4\n")
+
+        assert refresh_manifest_source(str(manifest_path), str(pdf_path)) is True
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert manifest["source_type"] == "pdf"
+        assert manifest["source_file"] == "source_document.pdf"
+        assert (tmp_path / "source_document.pdf").read_bytes() == b"%PDF-1.4\n"
+
+        md_path = tmp_path / "lesson.md"
+        md_path.write_text("# Heading\n\n- **Bold** item\n", encoding="utf-8")
+        assert refresh_manifest_source(str(manifest_path), str(md_path)) is True
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        assert manifest["source_type"] == "md"
+        assert manifest["source_file"] == "source_document.md"
+        assert manifest["source_markdown"] == "# Heading\n\n- **Bold** item\n"
+
     def test_lipsync_epub_omits_presenter_video(
         self, sample_aligned_chunks, sample_pdf_simple, tmp_path
     ):

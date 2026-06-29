@@ -107,6 +107,24 @@ async def reader_presenter(job_id: UUID):
     return FileResponse(path, media_type="video/mp4", filename=PRESENTER_NAME)
 
 
+@router.get("/jobs/{job_id}/reader/source")
+async def reader_source(job_id: UUID):
+    await _load_ready_job(job_id)
+    manifest_path = _resolve_reader_asset(job_id, MANIFEST_NAME)
+    if not manifest_path:
+        raise HTTPException(404, "Reader manifest not available for this job")
+    with open(manifest_path, "r", encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    source_file = manifest.get("source_file")
+    if not source_file or "/" in source_file or "\\" in source_file or ".." in source_file:
+        raise HTTPException(404, "Reader source document not available for this job")
+    path = _resolve_reader_asset(job_id, source_file)
+    if not path:
+        raise HTTPException(404, "Reader source document not found")
+    media_type, _ = mimetypes.guess_type(source_file)
+    return FileResponse(path, media_type=media_type or "application/octet-stream", filename=source_file)
+
+
 @router.get("/jobs/{job_id}/reader/pages/{filename}")
 async def reader_page_image(job_id: UUID, filename: str):
     await _load_ready_job(job_id)

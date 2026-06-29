@@ -150,6 +150,7 @@ export interface ReaderManifest {
   title: string;
   language: string;
   source_type: string;
+  source_file?: string | null;
   source_markdown?: string | null;
   duration: number;
   audio: string;

@@ -22,3 +22,7 @@ export function getReaderPageUrl(jobId: string, filename: string): string {
 export function getReaderPresenterUrl(jobId: string): string {
   return `/api/jobs/${jobId}/reader/presenter`;
 }
+
+export function getReaderSourceUrl(jobId: string): string {
+  return `/api/jobs/${jobId}/reader/source`;
+}

@@ -26,11 +26,12 @@ header{position:sticky;top:0;z-index:10;display:flex;justify-content:space-betwe
 h1{font:600 18px/1.2 system-ui,sans-serif;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 button,select,input{font:inherit}button,select{color:var(--fg);background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 10px;cursor:pointer}
 main{display:block;max-width:860px;margin:auto;padding:26px 24px 120px}
-main.has-pages{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,720px);gap:28px;max-width:1140px}
+main.has-document{display:grid;grid-template-columns:minmax(280px,420px) minmax(0,720px);gap:28px;max-width:1220px}
 #page-panel{display:none;position:sticky;top:82px;align-self:start;background:var(--surface);border:1px solid var(--border);border-radius:18px;overflow:hidden}
-main.has-pages #page-panel{display:block}
+main.has-document #page-panel{display:block}
 #page-label{padding:9px 14px;color:var(--muted);font:12px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.12em;border-bottom:1px solid var(--border)}
 #page-image{display:block;width:100%;height:auto}
+#source-pdf{display:block;width:100%;height:calc(100vh - 150px);min-height:520px;border:0;background:#fff}
 #text{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:28px 34px;min-height:50vh}
 .page h2{font:600 12px system-ui,sans-serif;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:24px 0 8px}.page:first-child h2{margin-top:0}
 p{margin:.7em 0}h1,h2,h3,h4{line-height:1.25}article h1{font-size:2rem}article h2{font-size:1.55rem}article h3{font-size:1.25rem}article pre{overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px}article code{background:var(--hover);border-radius:4px;padding:1px 4px;font-size:.9em}article pre code{background:transparent;padding:0}blockquote{border-left:4px solid var(--border);margin:1em 0;padding-left:1em;color:var(--muted)}table{width:100%;border-collapse:collapse;margin:1em 0}th,td{border:1px solid var(--border);padding:6px 10px;text-align:left}hr{border:0;border-top:1px solid var(--border);margin:2em 0}.word{border-radius:3px;padding:1px 2px}.word.active{background:var(--active);color:#1f1b14}.word:hover{background:var(--hover);cursor:pointer}
@@ -39,12 +40,12 @@ p{margin:.7em 0}h1,h2,h3,h4{line-height:1.25}article h1{font-size:2rem}article h
 footer{position:fixed;z-index:20;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -8px 24px #0002;padding:12px 18px;font:13px system-ui,sans-serif}
 .controls{display:flex;gap:12px;align-items:center;max-width:900px;margin:auto}.controls input[type=range]{flex:1}.time{font-variant-numeric:tabular-nums;color:var(--muted);min-width:42px}.play{width:45px;height:45px;border-radius:50%;font-size:18px;padding:0}.check{display:flex;gap:6px;align-items:center;color:var(--muted);white-space:nowrap}
 #show-presenter{display:none}
-@media(max-width:760px){main,main.has-pages{display:block;padding:16px 14px 120px}main.has-pages #page-panel{position:relative;top:auto;margin-bottom:18px;max-height:45vh}#page-image{max-height:45vh;object-fit:contain}#text{padding:22px 20px}#pip{width:220px}.check{display:none}}
+@media(max-width:760px){main,main.has-document{display:block;padding:16px 14px 120px}main.has-document #page-panel{position:relative;top:auto;margin-bottom:18px;max-height:45vh}#page-image{max-height:45vh;object-fit:contain}#source-pdf{height:45vh;min-height:260px}#text{padding:22px 20px}#pip{width:220px}.check{display:none}}
 </style>
 </head>
 <body>
 <header><h1 id="title"></h1><div><button id="show-presenter">Show presenter</button> <button id="theme">Night</button></div></header>
-<main id="reader-main"><aside id="page-panel"><div id="page-label">Document</div><img id="page-image" alt="Current document page"></aside><article id="text"></article></main>
+<main id="reader-main"><aside id="page-panel"><div id="page-label">Document</div><iframe id="source-pdf" title="Source PDF" hidden></iframe><img id="page-image" alt="Current document page" hidden></aside><article id="text"></article></main>
 <div id="pip"><div id="pipbar"><span>Presenter</span><button id="hide-presenter" aria-label="Hide presenter">x</button></div><video id="presenter" playsinline preload="auto"></video></div>
 <audio id="narration" preload="auto"></audio>
 <footer><div class="controls"><button class="play" id="play" aria-label="Play">&#9654;</button><span class="time" id="now">0:00</span><input id="seek" type="range" min="0" step="0.1" value="0"><span class="time" id="total">0:00</span><select id="rate" aria-label="Playback speed"><option>.75x</option><option selected>1x</option><option>1.25x</option><option>1.5x</option><option>2x</option></select><label class="check"><input id="scroll" type="checkbox" checked> Auto-scroll</label></div></footer>
@@ -58,9 +59,9 @@ presenter.src=hasPresenter?data.presenter:''; narration.src=data.audio; const me
 if(!hasPresenter)$('pip').style.display='none';
 const words=[], pages=new Map();
 for(const chunk of data.chunks){const page=chunk.pages[0]||0;if(!pages.has(page))pages.set(page,[]);pages.get(page).push(chunk);for(const word of chunk.words)words.push({...word,page});}
-const sourceTypes=new Set(['md','markdown','mdown']), hasMarkdown=data.source_markdown&&sourceTypes.has(String(data.source_type||'').toLowerCase());
+const sourceTypes=new Set(['md','markdown','mdown']), sourceType=String(data.source_type||'').toLowerCase(), hasMarkdown=data.source_markdown&&sourceTypes.has(sourceType), hasPdf=sourceType==='pdf'&&data.source_file;
 const hasPages=!!(data.pages&&data.pages.files&&Object.keys(data.pages.files).length);
-if(hasPages)$('reader-main').classList.add('has-pages');
+if(hasPdf||hasPages)$('reader-main').classList.add('has-document');
 function textSpan(token){const span=document.createElement('span');const idx=wordIndex++;span.className='word';span.dataset.i=idx;span.dataset.start=words[idx]?.start||0;span.textContent=token;return span}
 function appendTimedText(parent,text){for(const token of text.match(/\s+|[^\s]+/g)||[]){if(/^\s+$/.test(token)||!/[A-Za-z0-9]/.test(token)){parent.append(token);continue}parent.appendChild(textSpan(token));}}
 function renderInline(parent,text){const re=/(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\[[^\]]+\]\([^)]+\)|\*[^*\s][^*]*[^*\s]\*)/g;let last=0;for(const match of text.matchAll(re)){const token=match[0],idx=match.index||0;if(idx>last)appendTimedText(parent,text.slice(last,idx));let el;if(token.startsWith('`')){el=document.createElement('code');appendTimedText(el,token.slice(1,-1));}else if(token.startsWith('**')||token.startsWith('__')){el=document.createElement('strong');renderInline(el,token.slice(2,-2));}else if(token.startsWith('~~')){el=document.createElement('del');renderInline(el,token.slice(2,-2));}else if(token.startsWith('[')){const link=token.match(/^\[([^\]]+)\]\(([^)]+)\)$/),href=link&&/^(https?:|mailto:|#)/i.test(link[2].trim())?link[2].trim():'';el=document.createElement(href?'a':'span');if(href){el.href=href;if(!href.startsWith('#')){el.target='_blank';el.rel='noreferrer';}}renderInline(el,link?link[1]:token);}else{el=document.createElement('em');renderInline(el,token.slice(1,-1));}parent.appendChild(el);last=idx+token.length;}if(last<text.length)appendTimedText(parent,text.slice(last));}
@@ -70,7 +71,7 @@ let wordIndex=0;
 if(hasMarkdown){renderMarkdown(data.source_markdown)}else{for(const [page,chunks] of [...pages].sort((a,b)=>a[0]-b[0])){const section=document.createElement('section');section.className='page';const h=document.createElement('h2');h.textContent='Page '+(page||'');section.appendChild(h);for(const chunk of chunks){const p=document.createElement('p');if(chunk.words.length){for(const word of chunk.words){const span=textSpan(word.word+' ');span.dataset.start=word.start;p.appendChild(span);}}else p.textContent=chunk.text;section.appendChild(p);}$('text').appendChild(section);}}
 const spans=[...document.querySelectorAll('.word')]; let active=-1,lastPage=-1;
 function fmt(s){s=Math.max(0,Math.floor(s||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
-function showPage(page){if(!hasPages||page===lastPage)return;lastPage=page;const file=data.pages.files[String(page)];if(!file)return;$('page-label').textContent=page?'Page '+page:'Document';$('page-image').src=data.pages.dir+'/'+file;}
+function showPage(page){if((!hasPdf&&!hasPages)||page===lastPage)return;lastPage=page;$('page-label').textContent=page?'Page '+page:'Document';if(hasPdf){$('page-image').hidden=true;$('source-pdf').hidden=false;$('source-pdf').src=data.source_file+(page>0?'#page='+page:'');return}const file=data.pages.files[String(page)];if(!file)return;$('source-pdf').hidden=true;$('page-image').hidden=false;$('page-image').src=data.pages.dir+'/'+file;}
 function find(t){let lo=0,hi=words.length-1,best=-1;while(lo<=hi){const mid=(lo+hi)>>1;if(words[mid].start<=t){best=mid;lo=mid+1}else hi=mid-1}return best>=0&&t<words[best].end?best:best;}
 function update(){const t=media.currentTime||0,idx=find(t);$('now').textContent=fmt(t);$('seek').value=String(t);if(idx!==active){if(active>=0)spans[active]?.classList.remove('active');active=idx;if(active>=0){const el=spans[active];el?.classList.add('active');showPage(words[active].page);if($('scroll').checked)el?.scrollIntoView({behavior:'smooth',block:'center'});}}}
 media.addEventListener('timeupdate',update);media.addEventListener('play',()=>{$('play').innerHTML='&#10074;&#10074;'});media.addEventListener('pause',()=>{$('play').innerHTML='&#9654;'});media.addEventListener('loadedmetadata',()=>{$('seek').max=String(media.duration||data.duration);$('total').textContent=fmt(media.duration||data.duration)});
@@ -78,7 +79,7 @@ $('play').onclick=()=>media.paused?media.play():media.pause();$('seek').oninput=
 const saved=(()=>{try{return localStorage.getItem('reader-theme')}catch{return null}})();if(saved==='night')document.documentElement.classList.add('night');function themeLabel(){$('theme').textContent=document.documentElement.classList.contains('night')?'Day':'Night'}themeLabel();$('theme').onclick=()=>{document.documentElement.classList.toggle('night');themeLabel();try{localStorage.setItem('reader-theme',document.documentElement.classList.contains('night')?'night':'day')}catch{}};
 $('hide-presenter').onclick=()=>{$('pip').classList.add('hidden');$('show-presenter').style.display='inline-block'};$('show-presenter').onclick=()=>{$('pip').classList.remove('hidden');$('show-presenter').style.display='none'};
 let drag=null;$('pipbar').onpointerdown=e=>{if(e.target.tagName==='BUTTON')return;const r=$('pip').getBoundingClientRect();drag={dx:e.clientX-r.left,dy:e.clientY-r.top};$('pipbar').setPointerCapture(e.pointerId)};$('pipbar').onpointermove=e=>{if(!drag)return;$('pip').style.left=Math.max(0,Math.min(innerWidth-$('pip').offsetWidth,e.clientX-drag.dx))+'px';$('pip').style.top=Math.max(0,Math.min(innerHeight-$('pip').offsetHeight-70,e.clientY-drag.dy))+'px'};$('pipbar').onpointerup=()=>drag=null;
-if(hasPages)showPage(([...pages.keys()].sort((a,b)=>a-b)[0])||0);
+if(hasPdf||hasPages)showPage(([...pages.keys()].sort((a,b)=>a-b)[0])||0);
 })();
 </script>
 </body></html>'''
@@ -111,6 +112,9 @@ def build_offline_reader_archive(manifest_path: str, output_path: str) -> str:
         name = manifest.get(key)
         if name:
             assets.append((output_dir / name).resolve())
+    source_file = manifest.get("source_file")
+    if source_file:
+        assets.append((output_dir / source_file).resolve())
     pages = manifest.get("pages") or {}
     pages_dir = pages.get("dir")
     for name in (pages.get("files") or {}).values():

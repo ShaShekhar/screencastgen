@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -59,6 +60,15 @@ def _upload_reader_assets(job_id: uuid.UUID, output_dir: str) -> None:
     )
 
     candidates = [MANIFEST_NAME, AUDIO_NAME, PRESENTER_NAME]
+    manifest_abs = os.path.join(output_dir, MANIFEST_NAME)
+    if os.path.isfile(manifest_abs):
+        try:
+            with open(manifest_abs, "r", encoding="utf-8") as fh:
+                source_file = (json.load(fh) or {}).get("source_file")
+            if source_file:
+                candidates.append(str(source_file))
+        except Exception as exc:
+            logger.warning("Reader manifest source-file lookup failed: %s", exc)
     pages_abs = os.path.join(output_dir, PAGES_DIR)
     if os.path.isdir(pages_abs):
         for name in sorted(os.listdir(pages_abs)):

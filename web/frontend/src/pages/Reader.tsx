@@ -15,6 +15,7 @@ import {
   getReaderManifest,
   getReaderPageUrl,
   getReaderPresenterUrl,
+  getReaderSourceUrl,
 } from "../api/reader";
 import {
   deleteJob,
@@ -654,6 +655,29 @@ export default function Reader() {
     };
   }, [activePage, id, manifest]);
 
+  const activeDocument = useMemo(() => {
+    if (
+      id &&
+      manifest?.source_file &&
+      manifest.source_type.toLowerCase() === "pdf"
+    ) {
+      const page = activePage > 0 ? activePage : 1;
+      return {
+        kind: "pdf" as const,
+        page,
+        url: `${getReaderSourceUrl(id)}#page=${page}`,
+      };
+    }
+    if (activePageImage) {
+      return {
+        kind: "image" as const,
+        page: activePageImage.page,
+        url: activePageImage.url,
+      };
+    }
+    return null;
+  }, [activePage, activePageImage, id, manifest]);
+
   const handleTimeUpdate = useCallback(() => {
     const el = mediaRef.current;
     if (!el) return;
@@ -1059,32 +1083,43 @@ export default function Reader() {
         <div
           className={
             "max-w-6xl mx-auto " +
-            (activePageImage ? "lg:grid lg:grid-cols-[22rem_minmax(0,1fr)] lg:gap-8" : "")
+            (activeDocument ? "lg:grid lg:grid-cols-[26rem_minmax(0,1fr)] lg:gap-8" : "")
           }
         >
-          {activePageImage && (
+          {activeDocument && (
             <aside className="hidden lg:block">
               <div className="sticky top-6 rounded-3xl bg-[var(--reader-surface)] border border-[var(--reader-border)] shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--reader-border)] text-xs uppercase tracking-[0.2em] text-[var(--reader-muted)]">
-                  <span>Page {activePageImage.page}</span>
-                  <button
-                    type="button"
-                    onClick={() => setInvertPages((v) => !v)}
-                    className="normal-case tracking-normal rounded border border-[var(--reader-border)] px-1.5 py-0.5 hover:bg-[var(--reader-hover)] transition"
-                  >
-                    {invertPages ? "Original" : "Invert"}
-                  </button>
+                  <span>Page {activeDocument.page}</span>
+                  {activeDocument.kind === "image" && (
+                    <button
+                      type="button"
+                      onClick={() => setInvertPages((v) => !v)}
+                      className="normal-case tracking-normal rounded border border-[var(--reader-border)] px-1.5 py-0.5 hover:bg-[var(--reader-hover)] transition"
+                    >
+                      {invertPages ? "Original" : "Invert"}
+                    </button>
+                  )}
                 </div>
-                <img
-                  src={activePageImage.url}
-                  alt={`Page ${activePageImage.page}`}
-                  className="w-full h-auto block"
-                  style={
-                    invertPages
-                      ? { filter: "invert(1) hue-rotate(180deg)" }
-                      : undefined
-                  }
-                />
+                {activeDocument.kind === "pdf" ? (
+                  <iframe
+                    key={activeDocument.url}
+                    src={activeDocument.url}
+                    title={`Page ${activeDocument.page}`}
+                    className="block h-[calc(100vh-10rem)] min-h-[34rem] w-full bg-white"
+                  />
+                ) : (
+                  <img
+                    src={activeDocument.url}
+                    alt={`Page ${activeDocument.page}`}
+                    className="w-full h-auto block"
+                    style={
+                      invertPages
+                        ? { filter: "invert(1) hue-rotate(180deg)" }
+                        : undefined
+                    }
+                  />
+                )}
               </div>
             </aside>
           )}
@@ -1093,7 +1128,7 @@ export default function Reader() {
             ref={containerRef}
             className={
               "leading-relaxed text-lg sm:text-xl font-serif " +
-              (activePageImage ? "min-w-0" : "max-w-2xl mx-auto")
+              (activeDocument ? "min-w-0" : "max-w-2xl mx-auto")
             }
             onWheel={cancelAutoScroll}
             onTouchMove={cancelAutoScroll}
