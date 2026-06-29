@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - assets/demo-reader/**
+      - demo-reader/**
       - docs/**
       - .github/workflows/docs.yml
       - INSTALLATION.md
@@ -13,7 +13,7 @@ on:
       - pyproject.toml
   pull_request:
     paths:
-      - assets/demo-reader/**
+      - demo-reader/**
       - docs/**
       - .github/workflows/docs.yml
       - INSTALLATION.md
@@ -48,7 +48,7 @@ jobs:
         run: mkdocs build --strict
 
       - name: Add demo reader
-        run: cp -R assets/demo-reader site/demo-reader
+        run: cp -R demo-reader site/demo-reader
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
