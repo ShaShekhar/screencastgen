@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { type ReactNode } from "react";
 import { Job } from "../types";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -23,13 +24,12 @@ export default function JobCard({ job }: { job: Job }) {
   const opensReader =
     job.status === "completed" &&
     (job.pipeline_type === "highlight" || job.pipeline_type === "lipsync");
-  const href = opensReader ? `/jobs/${job.id}/read` : `/jobs/${job.id}`;
-
-  return (
-    <Link
-      to={href}
-      className="block bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition"
-    >
+  const href = `/jobs/${job.id}/read`;
+  const className =
+    "block bg-white rounded-xl border border-gray-200 p-5 transition " +
+    (opensReader ? "hover:shadow-md" : "");
+  const content: ReactNode = (
+    <>
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-medium text-gray-500">
           {PIPELINE_LABELS[job.pipeline_type] || job.pipeline_type}
@@ -61,6 +61,19 @@ export default function JobCard({ job }: { job: Job }) {
       <p className="text-xs text-gray-400 mt-2">
         {new Date(job.created_at).toLocaleString()}
       </p>
+    </>
+  );
+
+  if (!opensReader) {
+    return <div className={className}>{content}</div>;
+  }
+
+  return (
+    <Link
+      to={href}
+      className={className}
+    >
+      {content}
     </Link>
   );
 }

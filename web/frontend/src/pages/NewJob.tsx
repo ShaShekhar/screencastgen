@@ -74,8 +74,8 @@ export default function NewJob() {
     }
 
     try {
-      const job = await createJob(req);
-      navigate(`/jobs/${job.id}`);
+      await createJob(req);
+      navigate("/");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to create job";
       setError(msg);

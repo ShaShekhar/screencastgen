@@ -938,10 +938,10 @@ export default function Reader() {
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-4">
         <p className="text-red-600 max-w-md">{error || "Reader unavailable."}</p>
         <Link
-          to={id ? `/jobs/${id}` : "/"}
+          to="/"
           className="text-sm text-blue-600 hover:underline"
         >
-          Back to job
+          Back to jobs
         </Link>
       </div>
     );
@@ -969,7 +969,7 @@ export default function Reader() {
       <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--reader-border)] bg-[var(--reader-surface)]">
         <div className="flex items-center gap-3 min-w-0">
           <Link
-            to={id ? `/jobs/${id}` : "/"}
+            to="/"
             className="text-[var(--reader-muted)] hover:text-[var(--reader-fg)] text-sm shrink-0"
           >
             ← Back
