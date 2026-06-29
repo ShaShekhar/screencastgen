@@ -634,6 +634,46 @@ class TestLipsyncReaderBundle:
         assert "fetch(" not in html
         assert "presenter.mp4" in html
 
+    def test_offline_archive_preserves_markdown_without_empty_page_panel(self, tmp_path):
+        from screencastgen.offline_reader import build_offline_reader_archive
+        from screencastgen.reader_assets import MANIFEST_NAME
+
+        (tmp_path / "reader_audio.mp3").write_bytes(b"audio")
+        manifest = {
+            "version": 1,
+            "title": "Markdown Test",
+            "language": "en",
+            "source_type": "md",
+            "source_markdown": "# Heading\n\n- **Bold** item\n",
+            "duration": 1.0,
+            "audio": "reader_audio.mp3",
+            "presenter": None,
+            "pages": None,
+            "chunks": [{
+                "chunk_num": 1,
+                "text": "Heading Bold item",
+                "offset": 0,
+                "pages": [],
+                "words": [
+                    {"word": "Heading", "start": 0, "end": 0.3},
+                    {"word": "Bold", "start": 0.3, "end": 0.6},
+                    {"word": "item", "start": 0.6, "end": 1.0},
+                ],
+            }],
+        }
+        manifest_path = tmp_path / MANIFEST_NAME
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        output = tmp_path / "offline.zip"
+        build_offline_reader_archive(str(manifest_path), str(output))
+
+        with zipfile.ZipFile(output) as archive:
+            html = archive.read("index.html").decode()
+
+        assert "renderMarkdown" in html
+        assert "No page image available" not in html
+        assert '"source_markdown": "# Heading\\n\\n- **Bold** item\\n"' in html
+
     def test_lipsync_epub_omits_presenter_video(
         self, sample_aligned_chunks, sample_pdf_simple, tmp_path
     ):

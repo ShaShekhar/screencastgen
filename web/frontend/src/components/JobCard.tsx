@@ -20,10 +20,14 @@ export default function JobCard({ job }: { job: Job }) {
     job.progress_total > 0
       ? Math.round((job.progress_current / job.progress_total) * 100)
       : 0;
+  const opensReader =
+    job.status === "completed" &&
+    (job.pipeline_type === "highlight" || job.pipeline_type === "lipsync");
+  const href = opensReader ? `/jobs/${job.id}/read` : `/jobs/${job.id}`;
 
   return (
     <Link
-      to={`/jobs/${job.id}`}
+      to={href}
       className="block bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition"
     >
       <div className="flex items-center justify-between mb-3">

@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   getReaderAudioUrl,
   getReaderManifest,
@@ -17,6 +17,7 @@ import {
   getReaderPresenterUrl,
 } from "../api/reader";
 import {
+  deleteJob,
   getEpubExportDownloadUrl,
   getEpubExportStatus,
   getDownloadUrl,
@@ -461,6 +462,7 @@ function loadTheme(): ThemeName {
 
 export default function Reader() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [manifest, setManifest] = useState<ReaderManifest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -486,6 +488,8 @@ export default function Reader() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [epubStatus, setEpubStatus] = useState<EpubExportStatus>(null);
   const [epubError, setEpubError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [pipPos, setPipPos] = useState<{ x: number; y: number }>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(PIP_POS_KEY) || "");
@@ -642,6 +646,18 @@ export default function Reader() {
       setEpubError("Could not start the EPUB export.");
     }
   }, [id]);
+
+  const handleDelete = useCallback(async () => {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      await deleteJob(id);
+      navigate("/");
+    } catch {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }, [id, navigate]);
 
   const flatWords = useMemo(() => {
     if (!manifest) return [];
@@ -1076,6 +1092,36 @@ export default function Reader() {
             >
               Download Output
             </a>
+          )}
+          {id && (
+            showDeleteConfirm ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="text-xs rounded-md border border-red-500/70 px-2.5 py-1 text-red-400 hover:bg-red-500/10 disabled:opacity-60 transition"
+                >
+                  {deleting ? "Deleting..." : "Confirm delete"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="text-xs rounded-md border border-[var(--reader-border)] px-2.5 py-1 hover:bg-[var(--reader-hover)] disabled:opacity-60 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-xs rounded-md border border-red-500/60 px-2.5 py-1 text-red-400 hover:bg-red-500/10 transition"
+              >
+                Delete Job
+              </button>
+            )
           )}
         </div>
       </header>
