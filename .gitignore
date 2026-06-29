@@ -48,6 +48,7 @@ web/frontend/dist/
 Thumbs.db
 
 # Debug / temp files
+logs/
 chunks_debug.txt
 chunks_info.txt
 chunk_analysis.txt
