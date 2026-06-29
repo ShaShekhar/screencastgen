@@ -95,13 +95,69 @@ const ZONE_CURSOR: Record<PipZone, string> = {
 
 const MARKDOWN_SOURCE_TYPES = new Set(["md", "markdown", "mdown"]);
 
+interface MarkdownRenderContext {
+  activeIdx: number;
+  seekToWord: (idx: number) => void;
+  wordIndex: number;
+}
+
 function safeMarkdownHref(raw: string): string | undefined {
   const href = raw.trim();
   if (/^(https?:|mailto:|#)/i.test(href)) return href;
   return undefined;
 }
 
-function renderMarkdownInline(text: string, keyPrefix: string): ReactNode[] {
+function wordClass(isActive: boolean): string {
+  return (
+    "cursor-pointer transition-colors rounded px-0.5 " +
+    (isActive
+      ? "bg-[var(--reader-highlight-bg)] text-[var(--reader-highlight-fg)]"
+      : "hover:bg-[var(--reader-hover)]")
+  );
+}
+
+function renderTimedText(
+  text: string,
+  keyPrefix: string,
+  ctx: MarkdownRenderContext,
+): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const tokenRe = /(\s+|[^\s]+)/g;
+  let tokenIndex = 0;
+
+  for (const match of text.matchAll(tokenRe)) {
+    const token = match[0];
+    const key = `${keyPrefix}-txt-${tokenIndex++}`;
+    if (/^\s+$/.test(token) || !/[A-Za-z0-9]/.test(token)) {
+      nodes.push(token);
+      continue;
+    }
+
+    const idx = ctx.wordIndex++;
+    nodes.push(
+      <span
+        key={key}
+        data-w={idx}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          ctx.seekToWord(idx);
+        }}
+        className={wordClass(idx === ctx.activeIdx)}
+      >
+        {token}
+      </span>,
+    );
+  }
+
+  return nodes;
+}
+
+function renderMarkdownInline(
+  text: string,
+  keyPrefix: string,
+  ctx: MarkdownRenderContext,
+): ReactNode[] {
   const nodes: ReactNode[] = [];
   const tokenRe =
     /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\[[^\]]+\]\([^)]+\)|\*[^*\s][^*]*[^*\s]\*)/g;
@@ -110,19 +166,35 @@ function renderMarkdownInline(text: string, keyPrefix: string): ReactNode[] {
   for (const match of text.matchAll(tokenRe)) {
     const token = match[0];
     const index = match.index ?? 0;
-    if (index > last) nodes.push(text.slice(last, index));
+    if (index > last) {
+      nodes.push(
+        ...renderTimedText(
+          text.slice(last, index),
+          `${keyPrefix}-plain-${tokenIndex}`,
+          ctx,
+        ),
+      );
+    }
 
     const key = `${keyPrefix}-${tokenIndex++}`;
     if (token.startsWith("`")) {
       nodes.push(
         <code key={key} className="rounded bg-[var(--reader-hover)] px-1 py-0.5 text-[0.85em]">
-          {token.slice(1, -1)}
+          {renderTimedText(token.slice(1, -1), `${key}-code`, ctx)}
         </code>,
       );
     } else if (token.startsWith("**") || token.startsWith("__")) {
-      nodes.push(<strong key={key}>{token.slice(2, -2)}</strong>);
+      nodes.push(
+        <strong key={key}>
+          {renderMarkdownInline(token.slice(2, -2), key, ctx)}
+        </strong>,
+      );
     } else if (token.startsWith("~~")) {
-      nodes.push(<del key={key}>{token.slice(2, -2)}</del>);
+      nodes.push(
+        <del key={key}>
+          {renderMarkdownInline(token.slice(2, -2), key, ctx)}
+        </del>,
+      );
     } else if (token.startsWith("[")) {
       const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
       const href = link ? safeMarkdownHref(link[2]) : undefined;
@@ -135,18 +207,24 @@ function renderMarkdownInline(text: string, keyPrefix: string): ReactNode[] {
             rel={href.startsWith("#") ? undefined : "noreferrer"}
             className="underline decoration-[var(--reader-muted)] underline-offset-4 hover:text-blue-400"
           >
-            {link?.[1]}
+            {renderMarkdownInline(link?.[1] ?? "", key, ctx)}
           </a>
         ) : (
-          link?.[1] ?? token
+          renderMarkdownInline(link?.[1] ?? token, key, ctx)
         ),
       );
     } else {
-      nodes.push(<em key={key}>{token.slice(1, -1)}</em>);
+      nodes.push(
+        <em key={key}>
+          {renderMarkdownInline(token.slice(1, -1), key, ctx)}
+        </em>,
+      );
     }
     last = index + token.length;
   }
-  if (last < text.length) nodes.push(text.slice(last));
+  if (last < text.length) {
+    nodes.push(...renderTimedText(text.slice(last), `${keyPrefix}-tail`, ctx));
+  }
   return nodes;
 }
 
@@ -169,7 +247,7 @@ function isMarkdownBlockStart(line: string, nextLine?: string): boolean {
   );
 }
 
-function renderMarkdownDocument(markdown: string): ReactNode[] {
+function renderMarkdownDocument(markdown: string, ctx: MarkdownRenderContext): ReactNode[] {
   const lines = stripMarkdownFrontMatter(markdown).split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
@@ -197,7 +275,7 @@ function renderMarkdownDocument(markdown: string): ReactNode[] {
           key={`md-${blockIndex++}`}
           className="mb-5 overflow-x-auto rounded-lg border border-[var(--reader-border)] bg-[var(--reader-surface)] p-4 text-sm leading-6"
         >
-          <code>{codeLines.join("\n")}</code>
+          <code>{renderTimedText(codeLines.join("\n"), `code-${blockIndex}`, ctx)}</code>
         </pre>,
       );
       continue;
@@ -217,7 +295,7 @@ function renderMarkdownDocument(markdown: string): ReactNode[] {
               : "text-lg";
       blocks.push(
         <Tag key={`md-${blockIndex++}`} className={`${size} mt-8 mb-4 font-semibold leading-tight`}>
-          {renderMarkdownInline(heading[2], `h-${blockIndex}`)}
+          {renderMarkdownInline(heading[2], `h-${blockIndex}`, ctx)}
         </Tag>,
       );
       i += 1;
@@ -255,7 +333,7 @@ function renderMarkdownDocument(markdown: string): ReactNode[] {
               <tr>
                 {head.map((cell, idx) => (
                   <th key={idx} className="border border-[var(--reader-border)] px-3 py-2 text-left font-semibold">
-                    {renderMarkdownInline(cell, `th-${blockIndex}-${idx}`)}
+                    {renderMarkdownInline(cell, `th-${blockIndex}-${idx}`, ctx)}
                   </th>
                 ))}
               </tr>
@@ -265,7 +343,7 @@ function renderMarkdownDocument(markdown: string): ReactNode[] {
                 <tr key={rowIdx}>
                   {row.map((cell, cellIdx) => (
                     <td key={cellIdx} className="border border-[var(--reader-border)] px-3 py-2">
-                      {renderMarkdownInline(cell, `td-${blockIndex}-${rowIdx}-${cellIdx}`)}
+                      {renderMarkdownInline(cell, `td-${blockIndex}-${rowIdx}-${cellIdx}`, ctx)}
                     </td>
                   ))}
                 </tr>
@@ -294,7 +372,7 @@ function renderMarkdownDocument(markdown: string): ReactNode[] {
           className={`mb-5 pl-6 ${ordered ? "list-decimal" : "list-disc"} space-y-2`}
         >
           {items.map((item, idx) => (
-            <li key={idx}>{renderMarkdownInline(item, `li-${blockIndex}-${idx}`)}</li>
+            <li key={idx}>{renderMarkdownInline(item, `li-${blockIndex}-${idx}`, ctx)}</li>
           ))}
         </ListTag>,
       );
@@ -312,7 +390,7 @@ function renderMarkdownDocument(markdown: string): ReactNode[] {
           key={`md-${blockIndex++}`}
           className="mb-5 border-l-4 border-[var(--reader-border)] pl-4 text-[var(--reader-muted)]"
         >
-          {renderMarkdownInline(quoteLines.join(" "), `q-${blockIndex}`)}
+          {renderMarkdownInline(quoteLines.join(" "), `q-${blockIndex}`, ctx)}
         </blockquote>,
       );
       continue;
@@ -330,7 +408,7 @@ function renderMarkdownDocument(markdown: string): ReactNode[] {
     }
     blocks.push(
       <p key={`md-${blockIndex++}`} className="mb-5">
-        {renderMarkdownInline(paragraph.join(" "), `p-${blockIndex}`)}
+        {renderMarkdownInline(paragraph.join(" "), `p-${blockIndex}`, ctx)}
       </p>,
     );
   }
@@ -607,16 +685,6 @@ export default function Reader() {
     };
   }, [activePage, id, manifest]);
 
-  const markdownBlocks = useMemo(() => {
-    if (
-      !manifest?.source_markdown ||
-      !MARKDOWN_SOURCE_TYPES.has(manifest.source_type.toLowerCase())
-    ) {
-      return null;
-    }
-    return renderMarkdownDocument(manifest.source_markdown);
-  }, [manifest]);
-
   const handleTimeUpdate = useCallback(() => {
     const el = mediaRef.current;
     if (!el) return;
@@ -746,6 +814,20 @@ export default function Reader() {
     },
     [flatWords],
   );
+
+  const markdownBlocks = useMemo(() => {
+    if (
+      !manifest?.source_markdown ||
+      !MARKDOWN_SOURCE_TYPES.has(manifest.source_type.toLowerCase())
+    ) {
+      return null;
+    }
+    return renderMarkdownDocument(manifest.source_markdown, {
+      activeIdx,
+      seekToWord,
+      wordIndex: 0,
+    });
+  }, [activeIdx, manifest, seekToWord]);
 
   const togglePlay = useCallback(() => {
     const el = mediaRef.current;
@@ -1067,12 +1149,7 @@ export default function Reader() {
                               key={idx}
                               data-w={idx}
                               onClick={() => seekToWord(idx)}
-                              className={
-                                "cursor-pointer transition-colors rounded px-0.5 " +
-                                (isActive
-                                  ? "bg-[var(--reader-highlight-bg)] text-[var(--reader-highlight-fg)]"
-                                  : "hover:bg-[var(--reader-hover)]")
-                              }
+                              className={wordClass(isActive)}
                             >
                               {w.word}{" "}
                             </span>
