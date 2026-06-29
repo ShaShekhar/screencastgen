@@ -12,6 +12,10 @@ Read the [documentation site](https://shashekhar.github.io/screencastgen/) for
 guided workflows, architecture, troubleshooting, and the developer reference.
 The Markdown source is maintained in [`docs/`](docs/).
 
+Try the hosted
+[interactive demo reader](https://shashekhar.github.io/screencastgen/demo-reader/)
+to see synchronized narration, text highlighting, and the presenter view.
+
 Preview documentation changes locally with:
 
 ```bash

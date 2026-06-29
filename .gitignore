@@ -1,6 +1,7 @@
 # Audio output
 audio/
 *.mp3
+!assets/demo-reader/reader_audio.mp3
 *.wav
 *.ogg
 !web/backend/voices/*.wav

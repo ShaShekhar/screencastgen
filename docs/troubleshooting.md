@@ -27,7 +27,7 @@ screencastgen doctor \
 ## WhisperX falls back to CPU
 
 This commonly means the expected cuDNN runtime is unavailable. Follow
-[WhisperX CUDA troubleshooting](getting-started/installation.md#whisperx-cuda-troubleshooting)
+[WhisperX CUDA troubleshooting](getting-started/installation.md)
 to inspect the active Torch, CUDA, and cuDNN libraries.
 
 ## A pipeline resumes unexpected output
